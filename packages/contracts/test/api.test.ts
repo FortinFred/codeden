@@ -230,7 +230,15 @@ describe("api schemas", () => {
 
   it("round-trips OpenCode's setup check, sign-in command and provider info", () => {
     expect(SetupToolId.options).toContain("opencode");
-    expect(LoginToolId.options).toEqual(["claude", "codex", "opencode", "cursor", "gemini", "gh"]);
+    expect(LoginToolId.options).toEqual([
+      "claude",
+      "codex",
+      "opencode",
+      "cursor",
+      "gemini",
+      "copilot",
+      "gh",
+    ]);
     const check = roundTrip(SetupCheck, {
       id: "opencode",
       label: "OpenCode",

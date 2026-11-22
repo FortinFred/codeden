@@ -10,6 +10,7 @@ describe("provider registry", () => {
       "opencode",
       "cursor",
       "gemini",
+      "copilot",
     ]);
     const claude = getProvider("claude");
     const codex = getProvider("codex");
@@ -39,9 +40,19 @@ describe("provider registry", () => {
       readOnly: true,
       liveAutonomy: true,
     });
+    // Copilot CLI: no questions over ACP either, no steering.
+    const copilot = getProvider("copilot");
+    expect(copilot?.displayName).toBe("Copilot CLI");
+    expect(copilot?.capabilities()).toMatchObject({
+      userQuestions: false,
+      planMode: true,
+      steer: false,
+      readOnly: true,
+      liveAutonomy: true,
+    });
     for (const p of listProviders()) {
       ProviderInfo.parse(providerInfo(p));
-      // Cursor and Gemini CLI offer no one-shot calls for the utility model.
+      // Cursor, Gemini CLI and Copilot CLI offer no one-shot calls for the utility model.
       if (p.utilityModel) expect(p.utilityModel().providerId).toBe(p.id);
     }
     expect(getProvider("nope")).toBeUndefined();

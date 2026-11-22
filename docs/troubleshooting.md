@@ -84,6 +84,7 @@ Where CodeDen looks, in order:
    - OpenCode: `~/.opencode/bin/opencode` (`%USERPROFILE%\.opencode\bin\opencode.exe` on Windows), where its install script puts it; `/opt/homebrew/bin/opencode` and `/usr/local/bin/opencode` on macOS.
    - Cursor CLI: `cursor-agent`, or an `agent` whose version is Cursor's (`2026.10.22-…`): `~/.local/bin/agent`, and `%LOCALAPPDATA%\cursor-agent\agent.cmd` on Windows.
    - Gemini CLI: npm's global folder (on your PATH); `/opt/homebrew/bin/gemini` and `/usr/local/bin/gemini` on macOS.
+   - Copilot CLI: npm's global folder (on your PATH); its install script's `~/.local/bin` and `/usr/local/bin`, `/opt/homebrew/bin` on macOS, and `%LOCALAPPDATA%\Microsoft\WinGet\Links` on Windows.
    - GitHub CLI: `C:\Program Files\GitHub CLI\gh.exe` on Windows; `/opt/homebrew/bin/gh` and `/usr/local/bin/gh` on macOS.
 
 The first copy that answers `--version` is used for detection, for sessions and for **Sign in**, so a working native install wins over a broken shim earlier on PATH. When the native installer says its folder *"is not in your PATH"*, CodeDen still finds it; add the folder to your PATH if you also want `claude` to work in your own terminals.
@@ -120,7 +121,7 @@ The Codex apps (the ChatGPT desktop app's Codex, the Codex IDE extension) list e
 
 Sessions from older CodeDen versions are still listed. To hide them, open **Settings → Providers → Provider apps** and choose **Review** next to **Hide CodeDen's sessions from the Codex app**. CodeDen lists the conversations it started that the Codex app still shows (found by its own record of them, never by their titles) and archives them once you confirm. They are archived, not deleted: they appear under the Codex app's archived conversations, and CodeDen can still resume and fork them.
 
-Claude Code, OpenCode and Gemini CLI don't add CodeDen's sessions to your own lists. Claude Code labels them as SDK sessions, which its `/resume` leaves out. OpenCode's are archived. Gemini CLI lists sessions per folder, and CodeDen's run in their own worktrees. The Cursor CLI does list them; see the next section.
+Claude Code, OpenCode and Gemini CLI don't add CodeDen's sessions to your own lists. Claude Code labels them as SDK sessions, which its `/resume` leaves out. OpenCode's are archived. Gemini CLI lists sessions per folder, and CodeDen's run in their own worktrees. The Cursor CLI and Copilot CLI do list them; see the next sections.
 
 ### CodeDen's sessions show up in the Cursor CLI's chat list
 
@@ -132,6 +133,14 @@ To see only your own chats:
 - The Cursor editor keeps its chats apart from the CLI's, so CodeDen's never appear in the editor's chat history or its Agents window.
 
 Don't delete CodeDen's chats (with Backspace or Delete in `agent ls`, or from Cursor's folders on disk). CodeDen resumes a Cursor session by loading its chat, for example after a restart or when it brings an archived session back. Once the chat is gone, the session says *"Could not resume Cursor session … started a new one"* and the agent starts over without its earlier turns. CodeDen's own transcript of the session is kept.
+
+### CodeDen's sessions show up in Copilot CLI's session list
+
+Copilot CLI saves every prompted session in `~/.copilot/session-store.db`, and `copilot --resume` lists them across folders, CodeDen's included (agent sessions, factory builders and reviewers, PMs and the orchestrator). It has no ACP request to archive or hide a conversation, so CodeDen can't keep its sessions out of that list; `vendorHistory` stays unset. An empty session, such as the one detection opens to check the sign-in, saves nothing.
+
+### Copilot CLI asks for an update, or its sign-in can't be confirmed
+
+CodeDen needs Copilot CLI **1.0.105** or newer: earlier builds accepted tool calls in ACP mode without sending `session/request_permission`, so CodeDen's approvals would be bypassed. Run `copilot update`, then press **Re-check**. Detection opens one empty `copilot --acp` session in a scratch folder: if the CLI is signed out and has no model provider of its own, it refuses, and the row offers **Sign in**, which runs `copilot login` in the terminal. A refusal for another reason shows as **Could not confirm the Copilot CLI sign-in** with Copilot's message in the row's details; sessions may still work. Copilot's saved approvals and `allowedUrls` apply before CodeDen sees a request, so clear them in Copilot CLI if you want every call to reach CodeDen.
 
 ### The Cursor CLI asks for `agent update`
 

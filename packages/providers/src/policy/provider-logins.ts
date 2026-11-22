@@ -10,17 +10,18 @@ import { WILDCARD, wildcardPattern } from "./wildcard";
 
 /**
  * The agent CLIs' own logins (§11.2, §15): Claude Code's, Codex's, Gemini CLI's, OpenCode's,
- * Cursor CLI's and the GitHub CLI's OAuth tokens and keys, kept as plain files in the user's
- * home. An agent that reads or copies one can take over the account, so reading, copying,
- * moving, archiving or searching one (or the folder that holds it) asks at every level, Full
- * included. Writing one already asks as a write outside the worktree. Their settings (Codex's
- * `config.toml`, Claude's `settings.json`, ...) stay readable.
+ * Cursor CLI's, Copilot CLI's and the GitHub CLI's OAuth tokens and keys, kept as plain files in
+ * the user's home. An agent that reads or copies one can take over the account, so reading,
+ * copying, moving, archiving or searching one (or the folder that holds it) asks at every level,
+ * Full included. Writing one already asks as a write outside the worktree. Their settings
+ * (Codex's `config.toml`, Claude's `settings.json`, ...) stay readable.
  *
  * Names alone are in `./login-names` (what `isSecretPath` knows). Here the session's home and
  * environment add the folders themselves and homes moved by a variable: `CODEX_HOME`,
- * `CLAUDE_CONFIG_DIR`, `GEMINI_CLI_HOME`, `XDG_DATA_HOME` (OpenCode), `XDG_CONFIG_HOME` and
- * `GH_CONFIG_DIR` (GitHub CLI, Cursor CLI), `CURSOR_CONFIG_DIR` and, on Windows, `APPDATA`
- * (`GitHub CLI`). A path may start with any of them (`$CODEX_HOME/auth.json`, `%APPDATA%\…`).
+ * `CLAUDE_CONFIG_DIR`, `GEMINI_CLI_HOME`, `COPILOT_HOME`, `XDG_DATA_HOME` (OpenCode),
+ * `XDG_CONFIG_HOME` and `GH_CONFIG_DIR` (GitHub CLI, Cursor CLI, the Copilot apps),
+ * `CURSOR_CONFIG_DIR` and, on Windows, `APPDATA` (`GitHub CLI`). A path may start with any of
+ * them (`$CODEX_HOME/auth.json`, `%APPDATA%\…`).
  */
 
 /** A verdict on an agent CLI's login, which every level asks about. */
@@ -50,6 +51,7 @@ function locations(ctx: PathContext, home: string): Record<string, string[]> {
     CODEX_HOME: set("CODEX_HOME", p.join(home, ".codex")),
     CLAUDE_CONFIG_DIR: set("CLAUDE_CONFIG_DIR", p.join(home, ".claude")),
     GEMINI_CLI_HOME: set("GEMINI_CLI_HOME", home),
+    COPILOT_HOME: set("COPILOT_HOME", p.join(home, ".copilot")),
     XDG_DATA_HOME: set("XDG_DATA_HOME", p.join(home, ".local", "share")),
     XDG_CONFIG_HOME: config,
     GH_CONFIG_DIR: set("GH_CONFIG_DIR", p.join(config[0] as string, "gh")),
@@ -73,9 +75,11 @@ export function providerLoginFolders(ctx: PathContext): string[] {
     ...under("CODEX_HOME"),
     ...under("CLAUDE_CONFIG_DIR"),
     ...under("GEMINI_CLI_HOME", ".gemini"),
+    ...under("COPILOT_HOME"),
     ...under("XDG_DATA_HOME", "opencode"),
     ...under("GH_CONFIG_DIR"),
     ...under("XDG_CONFIG_HOME", "gh"),
+    ...under("XDG_CONFIG_HOME", "github-copilot"),
     ...under("APPDATA", "GitHub CLI"),
     ...under("CURSOR_CONFIG_DIR"),
     ...under("XDG_CONFIG_HOME", "cursor"),
