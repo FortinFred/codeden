@@ -297,7 +297,10 @@ export class ForgejoHttp {
       case 429:
         return new ForgeError("forge_rate_limited", message);
       default:
-        return new ForgeError(status >= 500 ? "forge_unavailable" : "forge_validation", message);
+        return new ForgeError(
+          status === 408 || status >= 500 ? "forge_unavailable" : "forge_validation",
+          message,
+        );
     }
   }
 }
