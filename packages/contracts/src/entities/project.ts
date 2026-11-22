@@ -2,15 +2,18 @@ import { z } from "zod";
 import { AutonomyLevel, Id, ProviderId, ReasoningEffort, Timestamp } from "../common";
 import { ProjectExecution } from "../execution";
 import { AutonomyMode, DEFAULT_VISION_PATH, FactoryLimits } from "../factory";
+import { ForgeRepo } from "../forge";
 
 /**
  * Something re-detecting a project's folder found that CodeDen does not apply on its own (§9).
  * `github_remote_missing`: a `github` project's folder no longer has a GitHub `origin` (removed,
- * pointing at another host, or no git checkout at all). The project keeps its GitHub
- * coordinates until the user restores the remote or disconnects GitHub.
+ * pointing at another host, or no git checkout at all). `forge_remote_missing`: a `forge`
+ * project's folder no longer has an `origin` its configured forge connection matches, or it now
+ * points at another forge. Either way the project keeps its coordinates until the user restores
+ * the remote or disconnects the forge.
  */
 export const ProjectRemoteWarning = z.object({
-  code: z.literal("github_remote_missing"),
+  code: z.enum(["github_remote_missing", "forge_remote_missing"]),
   /** What `origin` points at now, credentials removed; null when there is no `origin`. */
   remoteUrl: z.string().nullable(),
   detectedAt: Timestamp,
@@ -103,18 +106,50 @@ export const GitHubRepo = z.object({
 export type GitHubRepo = z.infer<typeof GitHubRepo>;
 
 /**
- * A project. `github` projects get the full issue/PR/evidence flow; `local` projects
- * (no GitHub remote) get sessions, worktrees, checkpoints, diffs and automations only (§9).
- * The kind is detected when the project is added and again later (on server start, after
- * agent turns in local projects, on demand): a folder that gains a GitHub `origin` becomes a
- * `github` project. Losing the remote never downgrades a project on its own.
+ * A project. `github` projects get the full issue/PR/evidence flow; `forge` projects belong to a
+ * configured self-hosted Forgejo instance (`docs/forges.md` §4.4) and, in phase A1, behave like
+ * local projects until the forge sync and write phases land; `local` projects (no forge remote)
+ * get sessions, worktrees, checkpoints, diffs and automations only (§9). The kind is detected
+ * when the project is added and again later (on server start, after agent turns in local
+ * projects, on demand): a folder that gains a GitHub `origin` becomes a `github` project, and one
+ * whose `origin` matches a configured forge connection becomes a `forge` project. Losing the
+ * remote never downgrades a project on its own.
  */
 export const Project = z.discriminatedUnion("kind", [
   z.object({ ...projectBase, kind: z.literal("github"), github: GitHubRepo }),
+  z.object({ ...projectBase, kind: z.literal("forge"), forge: ForgeRepo }),
   z.object({ ...projectBase, kind: z.literal("local") }),
 ]);
 export type Project = z.infer<typeof Project>;
 export type ProjectKind = Project["kind"];
+
+/**
+ * GitHub and Forgejo as one shape for the forge port (`docs/forges.md` §4.4); null for a local
+ * project. A GitHub project maps to its fixed web base, so shared code never branches on the kind.
+ */
+export function forgeOf(project: Project): ForgeRepo | null {
+  switch (project.kind) {
+    case "github":
+      return {
+        provider: "github",
+        baseUrl: "https://github.com",
+        host: "github.com",
+        owner: project.github.owner,
+        repo: project.github.repo,
+        remoteUrl: project.github.remoteUrl,
+        defaultBranch: project.github.defaultBranch,
+      };
+    case "forge":
+      return project.forge;
+    case "local":
+      return null;
+  }
+}
+
+/** True for both forge kinds (`github` and `forge`); what the UI and tools use instead of `kind === "github"`. */
+export function isForgeProject(project: Project): boolean {
+  return project.kind === "github" || project.kind === "forge";
+}
 
 type Orderable = Pick<Project, "id" | "name" | "pinned" | "sortOrder">;
 

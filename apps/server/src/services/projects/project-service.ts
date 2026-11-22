@@ -7,6 +7,7 @@ import {
   DEFAULT_VISION_PATH,
   type DisconnectGithubResponse,
   FactoryLimits,
+  type ForgejoSettings,
   isFactoryMode,
   type Project,
   type ProjectDetection,
@@ -39,6 +40,11 @@ export interface ProjectServiceDeps {
   exec: Exec;
   /** Where clones go when the user doesn't pick a folder (`~/codeden-projects`). */
   projectsDir: string;
+  /**
+   * The configured Forgejo connection, read at detection time so a settings change applies to
+   * the next check without rebuilding the service. Null or absent: no forge connection.
+   */
+  forgejo?: () => ForgejoSettings | null;
 }
 
 const CLONE_TIMEOUT_MS = 10 * 60_000;
@@ -109,7 +115,7 @@ export class ProjectService {
     }
     if (!stat.isDirectory()) throw badRequest(`Not a folder: ${folder}`, "not_a_folder");
 
-    const detected = await detectProject(this.deps.exec, folder);
+    const detected = await detectProject(this.deps.exec, folder, this.forgeConnections());
     const path = detected.gitRoot ?? folder;
     const existing = this.list({ includeArchived: true }).find((p) => samePath(p.path, path));
     if (existing && existing.archivedAt === null) {
@@ -213,7 +219,7 @@ export class ProjectService {
         detected: null,
       };
     }
-    const detected = await detectProject(this.deps.exec, before.path);
+    const detected = await detectProject(this.deps.exec, before.path, this.forgeConnections());
     // Re-read: another change (a rename, a pin) may have landed while git ran.
     return this.apply(id, detected);
   }
@@ -258,7 +264,7 @@ export class ProjectService {
       );
     }
     const detected = isDirectory(project.path)
-      ? await detectProject(this.deps.exec, project.path)
+      ? await detectProject(this.deps.exec, project.path, this.forgeConnections())
       : null;
     if (detected?.github) {
       const { owner, repo } = detected.github;
@@ -324,7 +330,15 @@ export class ProjectService {
     };
     return detected.github
       ? { ...base, kind: "github", github: detected.github }
-      : { ...base, kind: "local" };
+      : detected.forge
+        ? { ...base, kind: "forge", forge: detected.forge }
+        : { ...base, kind: "local" };
+  }
+
+  /** The configured Forgejo connection as the detection matcher's list (none, or one in A1). */
+  private forgeConnections(): ForgejoSettings[] {
+    const connection = this.deps.forgejo?.();
+    return connection ? [connection] : [];
   }
 
   /** New projects go to the end of the unpinned group, after every slot (archived included). */

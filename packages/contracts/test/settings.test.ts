@@ -103,6 +103,42 @@ describe("speechExcerpt", () => {
   });
 });
 
+describe("Settings.forges", () => {
+  it("defaults to no Forgejo connection, so older settings files still parse", () => {
+    expect(defaultSettings().forges).toEqual({ forgejo: null });
+    expect(Settings.parse({ voice: { readAloud: { enabled: true } } }).forges.forgejo).toBeNull();
+  });
+
+  it("round-trips a Forgejo connection without a token", () => {
+    const parsed = Settings.parse({
+      forges: {
+        forgejo: {
+          baseUrl: "http://localhost:3000",
+          sshHost: "forge.example.com:2222",
+          allowInsecureHttp: true,
+        },
+      },
+    });
+    expect(parsed.forges.forgejo).toEqual({
+      baseUrl: "http://localhost:3000",
+      sshHost: "forge.example.com:2222",
+      allowInsecureHttp: true,
+    });
+    expect(Settings.parse(JSON.parse(JSON.stringify(parsed)))).toEqual(parsed);
+    expect(parsed.forges.forgejo).not.toHaveProperty("token");
+  });
+
+  it("applies the allowInsecureHttp default and rejects a malformed base URL", () => {
+    expect(
+      Settings.parse({ forges: { forgejo: { baseUrl: "https://forge.example.com" } } }).forges
+        .forgejo,
+    ).toEqual({ baseUrl: "https://forge.example.com", allowInsecureHttp: false });
+    expect(Settings.safeParse({ forges: { forgejo: { baseUrl: "not a url" } } }).success).toBe(
+      false,
+    );
+  });
+});
+
 describe("Settings.sessions", () => {
   it("turns PR feedback on by default, so settings files from before it existed still load", () => {
     expect(defaultSettings().sessions).toEqual({ prFeedback: true, autoRetry: true });

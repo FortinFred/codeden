@@ -72,6 +72,26 @@ export const ModelRef = z.object({
 export type ModelRef = z.infer<typeof ModelRef>;
 
 /**
+ * A configured self-hosted Forgejo connection (`docs/forges.md` §6.1). The token is not here:
+ * it lives in the OS keychain (`forgejo.token`) and is written through the forges API.
+ */
+export const ForgejoSettings = z.object({
+  /** The forge's web root, e.g. `https://forge.example.com` or `http://localhost:3000`. */
+  baseUrl: z.url(),
+  /** The SSH host (and optional port) an `origin` may use, e.g. `forge.example.com:2222`. */
+  sshHost: z.string().trim().min(1).max(255).optional(),
+  /** Allow plain HTTP to a public host; loopback and private addresses are allowed anyway. */
+  allowInsecureHttp: z.boolean().default(false),
+});
+export type ForgejoSettings = z.infer<typeof ForgejoSettings>;
+
+/** Forge connections, by provider. One Forgejo instance in phase A1 (`docs/forges.md` §6.1). */
+export const ForgeSettings = z.object({
+  forgejo: ForgejoSettings.nullable().default(null),
+});
+export type ForgeSettings = z.infer<typeof ForgeSettings>;
+
+/**
  * A model id the user added for a provider that doesn't list it (a new model, or one only
  * exposed through the provider's own config). The id is sent to the provider unchanged.
  */
@@ -114,6 +134,11 @@ export const Settings = z.object({
       agent: RoleDefaults.prefault({}),
     })
     .prefault({}),
+  /**
+   * Forge connections (`docs/forges.md` §6.1). Absent in settings written before forges
+   * existed, and `null` means no Forgejo connection: the Forgejo token is not part of settings.
+   */
+  forges: ForgeSettings.prefault({}),
   /** Small, cheap model for side jobs (§7.4). */
   utilityModel: z
     .object({

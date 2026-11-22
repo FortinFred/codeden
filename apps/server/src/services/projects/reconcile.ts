@@ -1,4 +1,5 @@
 import type {
+  ForgeRepo,
   GitHubRepo,
   Project,
   ProjectDetection,
@@ -34,6 +35,14 @@ export function sameGithubRepo(
   return (
     a.owner.toLowerCase() === b.owner.toLowerCase() && a.repo.toLowerCase() === b.repo.toLowerCase()
   );
+}
+
+/** Same Forgejo repository; owner and repository names are case-insensitive there too. */
+export function sameForgeRepo(
+  a: Pick<ForgeRepo, "owner" | "repo">,
+  b: Pick<ForgeRepo, "owner" | "repo">,
+): boolean {
+  return sameGithubRepo(a, b);
 }
 
 const keeping =
@@ -144,6 +153,10 @@ function reconcileRemote(
     return keep("unchanged", `Connected to ${label(project.github)}`);
   }
 
+  if (project.kind === "forge") {
+    return reconcileForge(project, detected, facts, update);
+  }
+
   if (gh) {
     return update(
       {
@@ -154,6 +167,19 @@ function reconcileRemote(
       },
       "github_connected",
       `Connected to ${label(gh)}`,
+    );
+  }
+  if (detected.forge) {
+    const forge = detected.forge;
+    return update(
+      {
+        ...project,
+        kind: "forge",
+        forge,
+        defaultBranch: project.defaultBranch ?? forge.defaultBranch,
+      },
+      "forge_connected",
+      `Connected to ${label(forge)} on ${forge.host}`,
     );
   }
   if (!detected.isGitRepo) {
@@ -168,4 +194,81 @@ function reconcileRemote(
     );
   }
   return keep("unchanged", `Still no GitHub remote on origin${elsewhere}`);
+}
+
+/** A forge project's own transitions (§7): follow its connection, never switch forge silently. */
+function reconcileForge(
+  project: Extract<Project, { kind: "forge" }>,
+  detected: ProjectDetection,
+  facts: ReconcileFacts,
+  update: (next: Project, outcome: ProjectRefreshOutcome, message: string) => Reconciled,
+): Reconciled {
+  const keep = keeping(project);
+  const current = project.forge;
+  const found = detected.forge;
+  const remoteUrl = detected.isGitRepo ? detected.remoteUrl : null;
+  const warn = (message: string): Reconciled => {
+    if (
+      project.remoteWarning?.code === "forge_remote_missing" &&
+      project.remoteWarning.remoteUrl === remoteUrl
+    ) {
+      return keep("forge_remote_missing", message);
+    }
+    return update(
+      {
+        ...project,
+        remoteWarning: { code: "forge_remote_missing", remoteUrl, detectedAt: facts.now },
+      },
+      "forge_remote_missing",
+      message,
+    );
+  };
+
+  if (!found) {
+    const message = detected.github
+      ? `origin now points to ${detected.github.remoteUrl}, not the configured Forgejo connection; forge features still use ${label(current)} on ${current.host}`
+      : remoteUrl
+        ? `origin now points to ${remoteUrl}, which does not match the configured Forgejo connection; forge features still use ${label(current)} on ${current.host}`
+        : `This folder has no matching Forgejo remote on origin any more; forge features still use ${label(current)} on ${current.host}`;
+    return warn(message);
+  }
+
+  if (found.provider !== current.provider || found.baseUrl !== current.baseUrl) {
+    // Another configured forge: switching would orphan the issue/PR lineage, so keep this one.
+    return warn(
+      `origin now matches ${found.baseUrl} (${label(found)}), not ${current.baseUrl}; forge features still use ${label(current)} on ${current.host}`,
+    );
+  }
+
+  const { remoteWarning, ...rest } = project;
+  if (!sameForgeRepo(current, found)) {
+    return update(
+      { ...rest, forge: found, defaultBranch: project.defaultBranch ?? found.defaultBranch },
+      "forge_changed",
+      `Now connected to ${label(found)} on ${found.host} (was ${label(current)})`,
+    );
+  }
+  if (current.remoteUrl !== found.remoteUrl || current.host !== found.host) {
+    // Same repository, new URL (https ↔ ssh, a rename's new casing): keep the connection.
+    const forge = {
+      ...current,
+      owner: found.owner,
+      repo: found.repo,
+      host: found.host,
+      remoteUrl: found.remoteUrl,
+    };
+    return update(
+      { ...rest, forge },
+      "forge_changed",
+      `Updated the remote of ${label(found)} to ${found.remoteUrl}`,
+    );
+  }
+  if (remoteWarning) {
+    return update(
+      rest,
+      "forge_connected",
+      `Connected to ${label(current)} on ${current.host} again`,
+    );
+  }
+  return keep("unchanged", `Connected to ${label(current)} on ${current.host}`);
 }

@@ -7,10 +7,13 @@ import {
   ForgeCommit,
   ForgeCompare,
   type ForgeConnection,
+  ForgeConnectionStatus,
   ForgeErrorCode,
   ForgeFileCommit,
   type ForgeIssue,
   ForgeIssueQuery,
+  ForgejoConnectionRequest,
+  ForgejoTestRequest,
   ForgePermission,
   type ForgePr,
   ForgeProvider,
@@ -258,5 +261,53 @@ describe("forge contracts", () => {
         message: null,
       }).provider,
     ).toBeUndefined();
+  });
+
+  it("round-trips a forge connection status and never carries the token", () => {
+    const status: ForgeConnectionStatus = {
+      provider: "forgejo",
+      connected: true,
+      baseUrl: "http://localhost:3000",
+      host: "localhost:3000",
+      login: "lee",
+      message: "Connected as lee",
+      version: "17.0.2",
+    };
+    expect(roundTrip(ForgeConnectionStatus, status)).toEqual(status);
+    expect(ForgeConnectionStatus.parse({ ...status, token: "s3cr3t" })).not.toHaveProperty("token");
+    // A connected-with-unknown-viewer status, and the unconfigured one.
+    expect(ForgeConnectionStatus.parse({ ...status, login: null }).login).toBeNull();
+    expect(
+      ForgeConnectionStatus.parse({
+        provider: "forgejo",
+        connected: false,
+        baseUrl: null,
+        host: null,
+        login: null,
+        message: "Forgejo is not configured",
+        version: null,
+      }).connected,
+    ).toBe(false);
+  });
+
+  it("applies the Forgejo connection request defaults", () => {
+    expect(ForgejoConnectionRequest.parse({ baseUrl: "http://localhost:3000" })).toEqual({
+      baseUrl: "http://localhost:3000",
+    });
+    expect(ForgejoTestRequest.parse({})).toEqual({});
+    expect(
+      ForgejoConnectionRequest.parse({
+        baseUrl: "https://forge.example.com",
+        sshHost: "  git.example.com:2222 ",
+        allowInsecureHttp: true,
+        token: "abc",
+      }),
+    ).toEqual({
+      baseUrl: "https://forge.example.com",
+      sshHost: "git.example.com:2222",
+      allowInsecureHttp: true,
+      token: "abc",
+    });
+    expect(ForgejoConnectionRequest.safeParse({ baseUrl: "not a url" }).success).toBe(false);
   });
 });

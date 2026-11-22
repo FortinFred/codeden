@@ -3,6 +3,7 @@ import type {
   AutomationRun,
   ErrorInfo,
   FactoryLimits,
+  ForgeRepo,
   ForkOrigin,
   GitHubIssueRef,
   GitHubPrRef,
@@ -55,7 +56,7 @@ export const projects = sqliteTable(
   "projects",
   {
     id: text("id").primaryKey(),
-    kind: text("kind", { enum: ["github", "local"] }).notNull(),
+    kind: text("kind", { enum: ["github", "forge", "local"] }).notNull(),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
     path: text("path").notNull(),
@@ -82,6 +83,8 @@ export const projects = sqliteTable(
     /** Manual list position (§13); the migration backfills it from the alphabetical order. */
     sortOrder: integer("sort_order").notNull().default(0),
     github: json<GitHubRepo>("github"),
+    /** Forgejo coordinates for a `forge` project (`docs/forges.md` §4.4); null for other kinds. */
+    forge: json<ForgeRepo>("forge"),
     /** Set when re-detection found the GitHub remote missing (§9); null when all is well. */
     remoteWarning: json<ProjectRemoteWarning>("remote_warning"),
     createdAt: text("created_at").notNull(),

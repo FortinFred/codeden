@@ -99,6 +99,7 @@ export function mockProjectApi(world: MockWorld): MockProjectApi {
             gitRoot: path,
             remoteUrl: null,
             github: null,
+            forge: null,
             defaultBranch: "main",
             currentBranch: "main",
             packageManager: "pnpm" as const,

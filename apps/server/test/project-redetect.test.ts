@@ -2,7 +2,13 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { GithubIssue, Project, ProjectDetection, RawEventEnvelope } from "@codeden/contracts";
+import type {
+  ForgeRepo,
+  GithubIssue,
+  Project,
+  ProjectDetection,
+  RawEventEnvelope,
+} from "@codeden/contracts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type Database, openDatabase } from "../src/db/client";
 import { EventStore } from "../src/events/store";
@@ -57,6 +63,7 @@ function detection(patch: Partial<ProjectDetection> = {}): ProjectDetection {
     gitRoot: "/work/todo",
     remoteUrl: null,
     github: null,
+    forge: null,
     defaultBranch: "main",
     currentBranch: "main",
     packageManager: null,
@@ -68,6 +75,26 @@ const withGithub = (owner: string, name: string, url?: string) => {
   const gh = repo(owner, name, url);
   return detection({ remoteUrl: gh.remoteUrl, github: gh });
 };
+const forgeRepo = (owner: string, name: string, patch: Partial<ForgeRepo> = {}): ForgeRepo => ({
+  provider: "forgejo",
+  baseUrl: "https://forge.example.com",
+  host: "forge.example.com",
+  owner,
+  repo: name,
+  remoteUrl: `https://forge.example.com/${owner}/${name}.git`,
+  defaultBranch: "main",
+  ...patch,
+});
+const withForge = (owner: string, name: string, patch: Partial<ForgeRepo> = {}) => {
+  const forge = forgeRepo(owner, name, patch);
+  return detection({ remoteUrl: forge.remoteUrl, forge });
+};
+const forgeProject = {
+  ...localProject,
+  kind: "forge",
+  isGitRepo: true,
+  forge: forgeRepo("acme", "widgets"),
+} as Project;
 const facts = { now, gitDirPresent: true, ownCheckout: true };
 
 describe("reconcileProject", () => {
@@ -182,6 +209,110 @@ describe("reconcileProject", () => {
     });
     expect(parent).toMatchObject({ changed: false, outcome: "unchanged" });
     expect(parent.project).toBe(localProject);
+  });
+
+  it("upgrades a local project that gained a configured forge origin", () => {
+    const result = reconcileProject(localProject, withForge("acme", "widgets"), facts);
+    expect(result).toMatchObject({ changed: true, outcome: "forge_connected" });
+    expect(result.message).toBe("Connected to acme/widgets on forge.example.com");
+    expect(result.project).toMatchObject({
+      kind: "forge",
+      forge: forgeRepo("acme", "widgets"),
+      defaultBranch: "main",
+      updatedAt: now,
+    });
+    // GitHub wins if a remote somehow matches both, keeping the locked GitHub flow.
+    const both = detection({
+      remoteUrl: "https://github.com/octo/todo.git",
+      github: repo("octo", "todo"),
+      forge: forgeRepo("octo", "todo", { baseUrl: "https://github.com", host: "github.com" }),
+    });
+    expect(reconcileProject(localProject, both, facts).project.kind).toBe("github");
+  });
+
+  it("follows a forge remote to a rename or another repository on the same forge", () => {
+    const same = reconcileProject(forgeProject, withForge("Acme", "widgets"), facts);
+    expect(same).toMatchObject({ changed: true, outcome: "forge_changed" });
+    expect(same.project.kind === "forge" && same.project.forge.owner).toBe("Acme");
+    expect(same.project.kind === "forge" && same.project.forge.repo).toBe("widgets");
+
+    const moved = reconcileProject(forgeProject, withForge("acme", "gadgets"), facts);
+    expect(moved).toMatchObject({ changed: true, outcome: "forge_changed" });
+    expect(moved.message).toBe(
+      "Now connected to acme/gadgets on forge.example.com (was acme/widgets)",
+    );
+    expect(moved.project.kind === "forge" && moved.project.forge).toEqual(
+      forgeRepo("acme", "gadgets"),
+    );
+
+    // A new URL for the same repository (https ↔ ssh) keeps the connection.
+    const ssh = reconcileProject(
+      forgeProject,
+      withForge("acme", "widgets", {
+        host: "git.example.com",
+        remoteUrl: "git@git.example.com:acme/widgets.git",
+      }),
+      facts,
+    );
+    expect(ssh).toMatchObject({ changed: true, outcome: "forge_changed" });
+    expect(ssh.project.kind === "forge" && ssh.project.forge).toMatchObject({
+      baseUrl: "https://forge.example.com",
+      host: "git.example.com",
+      remoteUrl: "git@git.example.com:acme/widgets.git",
+    });
+  });
+
+  it("never downgrades a forge project; it warns once and clears on return", () => {
+    const missing = reconcileProject(forgeProject, detection(), facts);
+    expect(missing).toMatchObject({ changed: true, outcome: "forge_remote_missing" });
+    expect(missing.project).toMatchObject({
+      kind: "forge",
+      forge: forgeRepo("acme", "widgets"),
+      remoteWarning: { code: "forge_remote_missing", remoteUrl: null, detectedAt: now },
+    });
+    expect(reconcileProject(missing.project, detection(), facts)).toMatchObject({
+      changed: false,
+      outcome: "forge_remote_missing",
+    });
+    const back = reconcileProject(missing.project, withForge("acme", "widgets"), facts);
+    expect(back).toMatchObject({ changed: true, outcome: "forge_connected" });
+    expect(back.project.remoteWarning).toBeUndefined();
+  });
+
+  it("keeps each forge when the remote now belongs to the other one", () => {
+    // A GitHub remote on a forge project: keep the forge and warn, never switch.
+    const githubRemote = reconcileProject(forgeProject, withGithub("octo", "todo"), facts);
+    expect(githubRemote).toMatchObject({ changed: true, outcome: "forge_remote_missing" });
+    expect(githubRemote.project).toMatchObject({
+      kind: "forge",
+      forge: forgeRepo("acme", "widgets"),
+      remoteWarning: { code: "forge_remote_missing" },
+    });
+
+    // A forge remote on a GitHub project: keep GitHub and warn.
+    const forgeRemote = reconcileProject(githubProject, withForge("acme", "widgets"), facts);
+    expect(forgeRemote).toMatchObject({ changed: true, outcome: "github_remote_missing" });
+    expect(forgeRemote.project).toMatchObject({
+      kind: "github",
+      github: repo("octo", "todo"),
+      remoteWarning: { code: "github_remote_missing" },
+    });
+
+    // The same path on another configured Forgejo instance is a different forge: warn.
+    const otherForge = reconcileProject(
+      forgeProject,
+      withForge("acme", "widgets", {
+        baseUrl: "https://other.example.com",
+        host: "other.example.com",
+        remoteUrl: "https://other.example.com/acme/widgets.git",
+      }),
+      facts,
+    );
+    expect(otherForge).toMatchObject({ changed: true, outcome: "forge_remote_missing" });
+    expect(otherForge.project).toMatchObject({
+      kind: "forge",
+      forge: forgeRepo("acme", "widgets"),
+    });
   });
 });
 

@@ -20,6 +20,7 @@ import { type FactoryOptions, FactoryService } from "./factory/factory-service";
 import { type FactoryGithub, GithubFactoryPort } from "./factory/github-port";
 import { FILE_RESET_NOTICES, reportFileReset } from "./file-reset-notice";
 import { ConfigFiles } from "./files/config-files";
+import { ForgejoConnection, type ForgejoConnectionDeps } from "./forge/connection";
 import { createGitBroker, type GitBroker } from "./git-broker";
 import { GithubService, type GithubServiceDeps } from "./github/github-service";
 import { projectTrustedAuthors } from "./github/review-trust";
@@ -113,6 +114,8 @@ export interface ServicesOptions {
   orchestration?: OrchestrationOptions & { github?: GithubPort; automation?: AutomationPort };
   /** GitHub API transport and poll intervals (tests point them at a fake GitHub). */
   github?: Pick<GithubServiceDeps, "fetch" | "baseUrl" | "idleIntervalMs" | "activeIntervalMs">;
+  /** Forgejo connection transport (tests inject a scripted client). */
+  forgejo?: Pick<ForgejoConnectionDeps, "client">;
   /** Automation clock, scheduler timings and file rescans (tests). */
   automations?: Pick<
     AutomationServiceDeps,
@@ -185,6 +188,8 @@ export interface AppServices {
   orchestration: OrchestrationService;
   /** GitHub connection, issue/PR sync, PRs and evidence (§9). */
   github: GithubService;
+  /** The self-hosted Forgejo connection (`docs/forges.md` §6.1); never exposes its token. */
+  forgejo: ForgejoConnection;
   /** Usage and cost reports, budgets and rate limits (§12.6). */
   usage: UsageService;
   /** Automations: definitions, scheduler, runs and issue triage (§10). */
@@ -226,6 +231,17 @@ export function createServices(opts: ServicesOptions): AppServices {
     store: opts.store,
     exec,
     projectsDir: opts.projectsDir ?? join(userHome, "codeden-projects"),
+    forgejo: () => opts.settings.get().forges.forgejo,
+  });
+  const forgejo = new ForgejoConnection({
+    settings: () => opts.settings.get(),
+    saveSettings: (forges) => {
+      const settings = opts.settings.update({ forges });
+      opts.store.append([{ type: "settings.updated", sessionId: null, payload: { settings } }]);
+    },
+    secrets: opts.secrets,
+    ...opts.forgejo,
+    log: opts.log,
   });
   const sessionRepo = new SessionRepo(opts.db, opts.store);
   const artifacts = new ArtifactService(opts.db, opts.store, opts.paths.artifacts);
@@ -553,6 +569,7 @@ export function createServices(opts: ServicesOptions): AppServices {
       isRemote: (sessionId) => isRemoteRunner(runners.forSession(sessionId)),
     }),
     github,
+    forgejo,
     orchestration,
     automations,
     userHome,

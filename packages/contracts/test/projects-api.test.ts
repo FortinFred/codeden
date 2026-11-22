@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   DisconnectGithubResponse,
   EventEnvelope,
+  forgeOf,
+  isForgeProject,
   Project,
   ProjectRefreshOutcome,
   RefreshProjectResponse,
@@ -16,6 +18,17 @@ function roundTrip<T>(schema: { parse: (v: unknown) => T }, value: unknown): T {
 }
 
 const local = { ...sampleProject, kind: "local" as const, github: undefined };
+const forgeRepo = {
+  provider: "forgejo" as const,
+  baseUrl: "http://localhost:3000",
+  host: "localhost:3000",
+  owner: "acme",
+  repo: "widgets",
+  remoteUrl: "http://localhost:3000/acme/widgets.git",
+  defaultBranch: "main",
+};
+const { github: _github, ...forgeBase } = sampleProject as Extract<Project, { kind: "github" }>;
+const forgeProject = { ...forgeBase, kind: "forge" as const, forge: forgeRepo };
 const detected = {
   isGitRepo: true,
   gitRoot: "C:/Projects/codeden",
@@ -26,6 +39,7 @@ const detected = {
     remoteUrl: "https://github.com/acme/codeden.git",
     defaultBranch: "main",
   },
+  forge: null,
   defaultBranch: "main",
   currentBranch: "main",
   packageManager: "pnpm",
@@ -48,6 +62,31 @@ describe("project re-detection", () => {
       Project.safeParse({ ...sampleProject, remoteWarning: { code: "other", detectedAt: ts } })
         .success,
     ).toBe(false);
+  });
+
+  it("round-trips a forge project and maps both forge kinds through forgeOf", () => {
+    const parsed = roundTrip(Project, forgeProject);
+    expect(parsed).toMatchObject({ kind: "forge", forge: forgeRepo });
+    expect(isForgeProject(parsed)).toBe(true);
+    expect(forgeOf(parsed)).toEqual(forgeRepo);
+    expect(isForgeProject(local)).toBe(false);
+    expect(forgeOf(local)).toBeNull();
+    expect(forgeOf(sampleProject)).toMatchObject({
+      provider: "github",
+      baseUrl: "https://github.com",
+      host: "github.com",
+      owner: "acme",
+      repo: "codeden",
+    });
+    expect(
+      roundTrip(Project, {
+        ...forgeProject,
+        remoteWarning: { code: "forge_remote_missing", remoteUrl: null, detectedAt: ts },
+      }).remoteWarning?.code,
+    ).toBe("forge_remote_missing");
+    // A forge project without its coordinates does not parse.
+    const { forge: _forge, ...withoutForge } = forgeProject;
+    expect(Project.safeParse(withoutForge).success).toBe(false);
   });
 
   it("parses project events written before remote warnings existed", () => {
@@ -82,6 +121,9 @@ describe("project re-detection", () => {
         detected: null,
       }).success,
     ).toBe(false);
+    expect(ProjectRefreshOutcome.options).toEqual(
+      expect.arrayContaining(["forge_connected", "forge_changed", "forge_remote_missing"]),
+    );
   });
 
   it("round-trips the disconnect response", () => {

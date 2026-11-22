@@ -220,5 +220,6 @@ describe("github contracts", () => {
       close: false,
     });
     expect(SecretKey.options).toContain("github.token");
+    expect(SecretKey.options).toContain("forgejo.token");
   });
 });
