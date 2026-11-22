@@ -172,7 +172,10 @@ export function ForgesSettings() {
         <Input
           aria-label="Forgejo URL"
           value={baseUrl}
-          onChange={(e) => setBaseUrl(e.target.value)}
+          onChange={(e) => {
+            setBaseUrl(e.target.value);
+            setResult(null);
+          }}
           placeholder="https://forge.example.com"
           className="h-8 font-mono text-xs"
         />
@@ -185,7 +188,10 @@ export function ForgesSettings() {
         <Input
           aria-label="Forgejo SSH host"
           value={sshHost}
-          onChange={(e) => setSshHost(e.target.value)}
+          onChange={(e) => {
+            setSshHost(e.target.value);
+            setResult(null);
+          }}
           placeholder="forge.example.com:2222"
           className="h-8 font-mono text-xs"
         />
@@ -198,7 +204,10 @@ export function ForgesSettings() {
           <Switch
             aria-label="Allow plain HTTP"
             checked={allowInsecureHttp}
-            onCheckedChange={setAllowInsecureHttp}
+            onCheckedChange={(value) => {
+              setAllowInsecureHttp(value);
+              setResult(null);
+            }}
           />
           {warning && (
             <p className="max-w-56 text-right text-2xs leading-relaxed text-status-waiting">
@@ -218,7 +227,10 @@ export function ForgesSettings() {
           autoComplete="off"
           aria-label="Forgejo access token"
           value={token}
-          onChange={(e) => setToken(e.target.value)}
+          onChange={(e) => {
+            setToken(e.target.value);
+            setResult(null);
+          }}
           placeholder={
             configured
               ? "•••••••• stored in the OS keychain"
