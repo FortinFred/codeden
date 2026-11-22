@@ -15,6 +15,7 @@ import { AutonomyModeButton } from "@/components/factory/autonomy-dialog";
 import { OpenFactoryViewButton } from "@/components/factory/factory-actions";
 import { FactoryPanel } from "@/components/factory/factory-panel";
 import { ProjectGithub } from "@/components/github/project-github";
+import { RemoteWarningBanner } from "@/components/github/remote-check";
 import { ArchivedSessionsList, SessionsList } from "@/components/project/lists";
 import { NowNext } from "@/components/project/now-next";
 import { ProjectExecution } from "@/components/project/project-execution";
@@ -62,6 +63,10 @@ export function ProjectPage({
   const counts = sessionCounts(data, projectId);
   const active = activeSessions(data.sessions, projectId);
   const factory = isFactoryMode(project.autonomyMode);
+  // Nothing is synced from a forge until phase A2: no GitHub panel, and no GitHub requests.
+  const tabs: ProjectTab[] =
+    project.kind === "forge" ? ["overview", "settings"] : ["overview", "github", "settings"];
+  const activeTab: ProjectTab = tabs.includes(tab) ? tab : "overview";
   const titleOf = (id: string | null) => data.sessions.find((s) => s.id === id)?.title ?? null;
   const go = (search: ProjectSearch) =>
     void navigate({ to: "/projects/$projectId", params: { projectId }, search, replace: true });
@@ -86,6 +91,29 @@ export function ProjectPage({
                     onClick={() => go({ tab: "github" })}
                     title="The folder no longer has this GitHub remote on origin"
                     aria-label="GitHub remote missing"
+                    className="text-status-waiting"
+                  >
+                    <AlertTriangle className="size-3" />
+                  </button>
+                )}
+              </span>
+            ) : project.kind === "forge" ? (
+              <span
+                className="flex min-w-0 items-center gap-1"
+                data-testid="project-forge-repo"
+                title="Forgejo repository"
+              >
+                <GitBranch className="size-3 shrink-0" />
+                <span className="shrink-0 text-muted-foreground">Forgejo repository</span>
+                <span className="truncate font-mono">
+                  {project.forge.host}/{project.forge.owner}/{project.forge.repo}
+                </span>
+                {project.remoteWarning && (
+                  <button
+                    type="button"
+                    onClick={() => go({})}
+                    title="The folder no longer has this Forgejo remote on origin"
+                    aria-label="Forgejo remote missing"
                     className="text-status-waiting"
                   >
                     <AlertTriangle className="size-3" />
@@ -125,16 +153,16 @@ export function ProjectPage({
         className="flex h-10 shrink-0 items-end gap-4 border-b border-border px-6"
         role="tablist"
       >
-        {(["overview", "github", "settings"] as const).map((t) => (
+        {tabs.map((t) => (
           <button
             key={t}
             type="button"
             role="tab"
-            aria-selected={tab === t}
+            aria-selected={activeTab === t}
             onClick={() => go(t === "overview" ? {} : { tab: t })}
             className={cn(
               "-mb-px border-b-2 border-transparent pb-2 text-[13px] text-muted-foreground hover:text-foreground",
-              tab === t && "border-primary text-foreground",
+              activeTab === t && "border-primary text-foreground",
             )}
           >
             {TAB_LABELS[t]}
@@ -143,15 +171,16 @@ export function ProjectPage({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto scroll-thin">
         <div className="mx-auto w-full max-w-6xl space-y-8 px-6 py-6">
-          {tab === "github" ? (
+          {activeTab === "github" ? (
             <ProjectGithub project={project} />
-          ) : tab === "settings" ? (
+          ) : activeTab === "settings" ? (
             <div className="max-w-3xl">
               <ProjectSettings project={project} />
               <ProjectExecution project={project} />
             </div>
           ) : (
             <>
+              {project.kind === "forge" && <RemoteWarningBanner project={project} />}
               <NowNext work={work} projectId={projectId} titleOf={titleOf} />
               {factory && <FactoryPanel project={project} />}
               <ProjectSpendCard projectId={projectId} />

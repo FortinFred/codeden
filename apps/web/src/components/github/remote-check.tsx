@@ -7,7 +7,10 @@ import { useClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const connected = (r: RefreshProjectResponse) =>
-  r.outcome === "github_connected" || r.outcome === "github_changed";
+  r.outcome === "github_connected" ||
+  r.outcome === "github_changed" ||
+  r.outcome === "forge_connected" ||
+  r.outcome === "forge_changed";
 
 /**
  * Detect a project's git checkout and GitHub remote again (§9): for a folder that got `git init`
@@ -71,18 +74,68 @@ export function CheckRemoteButton({
 }
 
 /**
- * A GitHub project whose folder lost its GitHub `origin` (§9): CodeDen never downgrades it on
- * its own. The user restores the remote and checks again, or makes the project local-only.
+ * A GitHub or forge project whose folder lost its matching `origin` (§9, `docs/forges.md` §7):
+ * CodeDen never downgrades it on its own. The user restores the remote and checks again, or
+ * disconnects the forge and makes the project local-only.
  */
 export function RemoteWarningBanner({ project }: { project: Project }) {
   const client = useClient();
+  const forge = project.kind === "forge";
   const disconnect = useMutation({
-    mutationFn: () => client.disconnectGithub(project.id),
+    mutationFn: () =>
+      forge ? client.disconnectForge(project.id) : client.disconnectGithub(project.id),
     onSuccess: () => toast.success(`${project.name} is now a local-only project`),
-    onError: (e) => toast.error("Couldn't disconnect GitHub", { description: e.message }),
+    onError: (e) =>
+      toast.error(forge ? "Couldn't disconnect the forge" : "Couldn't disconnect GitHub", {
+        description: e.message,
+      }),
   });
-  if (project.kind !== "github" || !project.remoteWarning) return null;
-  const { owner, repo } = project.github;
+  if (!project.remoteWarning) return null;
+  if (project.kind === "github") {
+    const { owner, repo } = project.github;
+    const { remoteUrl } = project.remoteWarning;
+    return (
+      <div
+        role="alert"
+        className="flex items-start gap-3 rounded-xl border border-status-waiting/30 bg-status-waiting/10 px-4 py-3"
+        data-testid="remote-warning"
+      >
+        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-status-waiting" />
+        <div className="min-w-0 flex-1 space-y-1">
+          <p className="text-[13px] font-medium">The GitHub remote is missing</p>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {remoteUrl ? (
+              <>
+                <code className="font-mono">origin</code> now points to{" "}
+                <code className="font-mono">{remoteUrl}</code>
+              </>
+            ) : (
+              <>
+                This folder has no GitHub <code className="font-mono">origin</code> any more
+              </>
+            )}
+            , so CodeDen still uses {owner}/{repo} for issues and pull requests. Restore the remote
+            and check again, or make the project local-only (synced issues and PRs are kept).
+          </p>
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <CheckRemoteButton projectId={project.id} layout="inline" />
+            <Button
+              size="xs"
+              variant="ghost"
+              onClick={() => disconnect.mutate()}
+              disabled={disconnect.isPending}
+            >
+              Make local-only
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (project.kind !== "forge" || project.remoteWarning.code !== "forge_remote_missing") {
+    return null;
+  }
+  const { owner, repo, host } = project.forge;
   const { remoteUrl } = project.remoteWarning;
   return (
     <div
@@ -92,7 +145,7 @@ export function RemoteWarningBanner({ project }: { project: Project }) {
     >
       <AlertTriangle className="mt-0.5 size-4 shrink-0 text-status-waiting" />
       <div className="min-w-0 flex-1 space-y-1">
-        <p className="text-[13px] font-medium">The GitHub remote is missing</p>
+        <p className="text-[13px] font-medium">The Forgejo remote is missing</p>
         <p className="text-xs leading-relaxed text-muted-foreground">
           {remoteUrl ? (
             <>
@@ -101,11 +154,11 @@ export function RemoteWarningBanner({ project }: { project: Project }) {
             </>
           ) : (
             <>
-              This folder has no GitHub <code className="font-mono">origin</code> any more
+              This folder has no matching Forgejo <code className="font-mono">origin</code> any more
             </>
           )}
-          , so CodeDen still uses {owner}/{repo} for issues and pull requests. Restore the remote
-          and check again, or make the project local-only (synced issues and PRs are kept).
+          , so CodeDen still uses {owner}/{repo} on {host}. Restore the remote and check again, or
+          disconnect the forge (the project becomes local-only; synced issues and PRs are kept).
         </p>
         <div className="flex flex-wrap items-center gap-2 pt-1">
           <CheckRemoteButton projectId={project.id} layout="inline" />
@@ -115,7 +168,7 @@ export function RemoteWarningBanner({ project }: { project: Project }) {
             onClick={() => disconnect.mutate()}
             disabled={disconnect.isPending}
           >
-            Make local-only
+            Disconnect forge
           </Button>
         </div>
       </div>

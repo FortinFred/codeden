@@ -1,7 +1,7 @@
 import type { Project, Session } from "@codeden/contracts";
 import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/core";
 import { Link } from "@tanstack/react-router";
-import { Archive, Bot, ChevronRight, GripVertical, House, Plus } from "lucide-react";
+import { Archive, Bot, ChevronRight, GitBranch, GripVertical, House, Plus } from "lucide-react";
 import { type CSSProperties, useState } from "react";
 import { StatusDot } from "@/components/common/status-dot";
 import { statusTone } from "@/lib/format";
@@ -124,6 +124,12 @@ export function ProjectGroup({
             />
             <ProjectTile project={project} />
             <span className="truncate font-medium">{project.name}</span>
+            {project.kind === "forge" && (
+              <GitBranch
+                className="size-3 shrink-0 text-muted-foreground"
+                aria-label="Forgejo repository"
+              />
+            )}
             {!open && (attention || running > 0) && (
               <span className="ml-auto flex items-center gap-1 pr-1">
                 {attention && <span className="size-1.5 rounded-full bg-status-waiting" />}
