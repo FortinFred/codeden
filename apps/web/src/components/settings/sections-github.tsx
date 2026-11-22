@@ -53,10 +53,20 @@ export function GithubSettings() {
         <SettingRow
           key={p.id}
           label={p.name}
-          help={p.kind === "github" ? `${p.github.owner}/${p.github.repo}` : "No GitHub remote"}
+          help={
+            p.kind === "github"
+              ? `${p.github.owner}/${p.github.repo}`
+              : p.kind === "forge"
+                ? `${p.forge.host}/${p.forge.owner}/${p.forge.repo}`
+                : "No GitHub remote"
+          }
         >
           <span className="text-2xs text-muted-foreground">
-            {p.kind === "github" ? "Issue and PR flow" : "Local only"}
+            {p.kind === "github"
+              ? "Issue and PR flow"
+              : p.kind === "forge"
+                ? "Forgejo repository"
+                : "Local only"}
           </span>
         </SettingRow>
       ))}
