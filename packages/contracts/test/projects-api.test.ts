@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DisconnectForgeResponse,
   DisconnectGithubResponse,
   EventEnvelope,
   forgeOf,
@@ -126,7 +127,11 @@ describe("project re-detection", () => {
     );
   });
 
-  it("round-trips the disconnect response", () => {
+  it("round-trips the disconnect responses", () => {
     expect(roundTrip(DisconnectGithubResponse, { project: local }).project.kind).toBe("local");
+    expect(roundTrip(DisconnectForgeResponse, { project: local }).project.kind).toBe("local");
+    expect(roundTrip(DisconnectForgeResponse, { project: forgeProject }).project.kind).toBe(
+      "forge",
+    );
   });
 });

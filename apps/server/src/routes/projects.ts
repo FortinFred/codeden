@@ -19,7 +19,8 @@ import { jsonBody, queryOf } from "./validate";
 
 /**
  * `/api/projects`: add from a folder or clone, list, reorder, update (and pin), archive, and
- * re-detect the folder's git checkout and GitHub remote (`refresh`, `disconnect-github`).
+ * re-detect the folder's git checkout and forge remote (`refresh`, `disconnect-github`,
+ * `disconnect-forge`).
  * `sessions/archived` pages through the project's archived sessions (the snapshot carries only
  * the recent ones).
  * `commands` and `files` feed the composer's `/` and `@` menus in the New session draft, before
@@ -68,6 +69,9 @@ export function projectRoutes(s: AppServices) {
     .post("/:id/refresh", async (c) => c.json(await s.redetector.refresh(c.req.param("id"))))
     .post("/:id/disconnect-github", async (c) =>
       c.json(await s.projects.disconnectGithub(c.req.param("id"))),
+    )
+    .post("/:id/disconnect-forge", async (c) =>
+      c.json(await s.projects.disconnectForge(c.req.param("id"))),
     )
     .delete("/:id", (c) => {
       s.projects.archive(c.req.param("id"));
