@@ -13,6 +13,8 @@
  *   logins from version 2) in its data folder, `opencode`.
  * - Cursor CLI: `auth.json` in a `cursor` config folder, and any credential-like name in
  *   `.cursor` (its file credential store has no documented name).
+ * - Copilot CLI: `hosts.yml` in `.copilot` (or `COPILOT_HOME`), any credential-like name there
+ *   (its file credential store), and `auth.db` in `github-copilot` (the Copilot apps' tokens).
  * - GitHub CLI: `hosts.yml` in `gh` or `GitHub CLI`.
  */
 
@@ -30,6 +32,9 @@ const IN_FOLDER: Record<string, RegExp> = {
   ".codex": /^auth\.json$/,
   opencode: /^(auth\.json|mcp-auth\.json|opencode\.db)/,
   cursor: /^auth\.json$/,
+  ".copilot": /^hosts\.ya?ml$/,
+  copilot: /^hosts\.ya?ml$/,
+  "github-copilot": /^auth\.db/,
   gh: /^hosts\.ya?ml$/,
   "github cli": /^hosts\.ya?ml$/,
 };
@@ -43,7 +48,7 @@ const IN_FOLDER: Record<string, RegExp> = {
 export const CREDENTIAL_LIKE = /auth|cred|token|secret|oauth|account|keychain/;
 
 /** Dot folders whose credential-like files are logins, wherever they are. */
-const DOT_FOLDERS = new Set([".claude", ".codex", ".gemini", ".cursor"]);
+const DOT_FOLDERS = new Set([".claude", ".codex", ".gemini", ".cursor", ".copilot"]);
 
 /** The known login file names, for wildcards (`cat ~/.codex/*.json` reaches `auth.json`). */
 export const LOGIN_FILE_NAMES = [
@@ -56,6 +61,7 @@ export const LOGIN_FILE_NAMES = [
   "mcp-auth.json",
   "opencode.db",
   "hosts.yml",
+  "auth.db",
 ];
 
 /**

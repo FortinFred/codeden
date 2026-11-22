@@ -6,6 +6,7 @@ import type { AcpAgentSpec } from "../src/acp/extensions";
 import { startAgent } from "../src/acp/process";
 import { claudeEnv } from "../src/claude/options";
 import { startAppServer } from "../src/codex/process";
+import { COPILOT_AGENT } from "../src/copilot/adapter";
 import { CURSOR_AGENT } from "../src/cursor/adapter";
 import { GEMINI_AGENT } from "../src/gemini/adapter";
 import { openCodeServerEnv } from "../src/opencode/server";
@@ -114,6 +115,7 @@ const SPAWN_ENV: Record<string, () => Env | Promise<Env>> = {
   opencode: () => openCodeServerEnv(process.env, SESSION_EXTRAS, "pw", {}),
   cursor: () => acpAgentEnv(CURSOR_AGENT),
   gemini: () => acpAgentEnv(GEMINI_AGENT),
+  copilot: () => acpAgentEnv(COPILOT_AGENT),
 };
 
 describe("agent session environment", () => {
