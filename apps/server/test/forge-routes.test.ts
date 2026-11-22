@@ -139,6 +139,11 @@ describe("/api/forges", () => {
       },
     });
 
+    // origin still matches the connection: disconnecting would undo itself on the next check.
+    const present = await call("POST", `/projects/${project.id}/disconnect-forge`);
+    expect(present.status).toBe(409);
+    expect(present.json()).toMatchObject({ error: { code: "forge_remote_present" } });
+
     // A factory mode needs a GitHub project, so the forge stays put until the mode changes.
     server.store.append([
       {
@@ -158,6 +163,7 @@ describe("/api/forges", () => {
         payload: { project: { ...project, autonomyMode: "assisted" } },
       },
     ]);
+    execFileSync("git", ["-C", folder, "remote", "remove", "origin"], { stdio: "pipe" });
     const disconnected = await call("POST", `/projects/${project.id}/disconnect-forge`);
     expect(disconnected.status).toBe(200);
     expect(DisconnectForgeResponse.parse(disconnected.json()).project.kind).toBe("local");

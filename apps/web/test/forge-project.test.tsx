@@ -1,6 +1,8 @@
 import type { ForgeRepo, Project, Snapshot } from "@codeden/contracts";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { toast } from "sonner";
 import { describe, expect, it, vi } from "vitest";
+import { ApiRequestError } from "@/lib/api/http";
 import { createMockClient } from "@/lib/api/mock";
 import { projects as fixtureProjects } from "@/lib/api/mock/fixtures/world";
 import { ProjectPage } from "@/routes/project";
@@ -86,5 +88,36 @@ describe("a forge project", () => {
     expect(banner.textContent).toContain("forge.example.com");
     fireEvent.click(screen.getByRole("button", { name: "Disconnect forge" }));
     await waitFor(() => expect(disconnect).toHaveBeenCalledWith(warned.id));
+  });
+
+  it("shows the forge_remote_present refusal like the GitHub one", async () => {
+    const error = vi.spyOn(toast, "error").mockImplementation(() => "t");
+    const client = createMockClient();
+    const warned: Project = {
+      ...forgeProject,
+      remoteWarning: {
+        code: "forge_remote_missing",
+        remoteUrl: "https://gitlab.com/acme/widgets.git",
+        detectedAt: local.createdAt,
+      },
+    };
+    const snapshot = await forgeSnapshot(warned);
+    client.getSnapshot = async () => snapshot;
+    const message =
+      "origin still matches acme/widgets on forge.example.com; change or remove it first";
+    client.disconnectForge = async () => {
+      throw new ApiRequestError(409, "forge_remote_present", message);
+    };
+
+    renderWithClient(<ProjectPage projectId={warned.id} tab="overview" />, client, {
+      withRouter: true,
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Disconnect forge" }));
+    await waitFor(() =>
+      expect(error).toHaveBeenCalledWith("Couldn't disconnect the forge", {
+        description: message,
+      }),
+    );
+    error.mockRestore();
   });
 });

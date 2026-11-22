@@ -292,10 +292,10 @@ export class ProjectService {
 
   /**
    * Make a forge project local-only: the user's answer to a missing Forgejo remote, or to
-   * changing their mind about the connection. Refused in a factory mode (which needs a GitHub
-   * project). Clears the forge coordinates and any `remoteWarning`; synced issues and PRs stay
-   * in the database. A detection that still matches the configured connection reconnects it,
-   * exactly as a GitHub project's `origin` does.
+   * changing their mind about the connection. Refused while `origin` still matches the
+   * configured connection (the next check would connect it again) and in a factory mode (which
+   * needs a GitHub project). Clears the forge coordinates and any `remoteWarning`; synced issues
+   * and PRs stay in the database.
    */
   async disconnectForge(id: string): Promise<DisconnectForgeResponse> {
     const project = this.get(id);
@@ -306,6 +306,16 @@ export class ProjectService {
       throw conflict(
         "Switch the autonomy mode to assisted or manual before disconnecting the forge",
         "factory_mode",
+      );
+    }
+    const detected = isDirectory(project.path)
+      ? await detectProject(this.deps.exec, project.path, this.forgeConnections())
+      : null;
+    if (detected?.forge) {
+      const { owner, repo, host } = detected.forge;
+      throw conflict(
+        `origin still matches ${owner}/${repo} on ${host}; change or remove it first`,
+        "forge_remote_present",
       );
     }
     const current = this.get(id);

@@ -69,10 +69,11 @@ export type DisconnectGithubResponse = z.infer<typeof DisconnectGithubResponse>;
 
 /**
  * `POST /api/projects/:id/disconnect-forge` response: the project, now `local`. Allowed only
- * for a `forge` project (`409 not_a_forge_project` otherwise) and refused while the project is
- * in a factory mode (`409 factory_mode`, which needs a GitHub project). The project's `forge`
- * coordinates and any `remoteWarning` are cleared; synced issues and pull requests, if any,
- * stay in the database.
+ * for a `forge` project (`409 not_a_forge_project` otherwise). Refused while the folder's
+ * `origin` still matches the configured forge connection (`409 forge_remote_present`; the next
+ * check would connect it again) and while the project is in a factory mode (`409 factory_mode`,
+ * which needs a GitHub project). The project's `forge` coordinates and any `remoteWarning` are
+ * cleared; synced issues and pull requests, if any, stay in the database.
  */
 export const DisconnectForgeResponse = z.object({ project: Project });
 export type DisconnectForgeResponse = z.infer<typeof DisconnectForgeResponse>;
