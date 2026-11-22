@@ -1,14 +1,14 @@
 # Forges: self-hosted Forgejo as a work source
 
-> Status: **proposed 2026-11-22**. Design only: no source, schema or UI changes are included.
-> Once approved this is part of the design (`docs/DESIGN.md` §3, §9, §10.1); the exact wording is
-> proposed in §11 and is not applied in this pull request.
+> Status: **approved 2026-11-22**. Design only: no source, schema or UI changes are included.
+> This is part of the design (`docs/DESIGN.md` §3, §9, §10.1); the exact wording is in §11 and was
+> applied to `docs/DESIGN.md` in this change.
 
-CodeDen is GitHub-only by a locked decision (§3, §9, §10.1). This document designs a second
-forge: a self-hosted **Forgejo** instance, reached through its Gitea-compatible REST API v1, so a
-project whose `origin` is a local Forgejo repository gets issues and pull requests as
-first-class work sources. The same PM triage, issue → session → pull request, review, merge,
-evidence and factory workflows should work there.
+CodeDen was GitHub-only by a locked decision (§3, §9, §10.1) until this design was approved. This
+document designs a second forge: a self-hosted **Forgejo** instance, reached through its
+Gitea-compatible REST API v1, so a project whose `origin` is a local Forgejo repository gets issues
+and pull requests as first-class work sources. The same PM triage, issue → session → pull request,
+review, merge, evidence and factory workflows should work there.
 
 GitHub stays supported and stays the default. This is an additive design, not a replacement.
 The parts of CodeDen that depend on GitHub's GraphQL API, `gh`, check runs, `author_association`
@@ -841,9 +841,10 @@ a scripted adapter test for the cases a real instance makes slow: a moved head b
 | **HTML markers in comments** | Forgejo stores the raw body; rendering strips HTML comments. Test the `<!-- codeden -->` marker and do not rely on it for display |
 | **Docker backend in phase 1** | Keep it GitHub-only until the forge is reachable from a container; the existing refusal message names the reason |
 
-## 11. Proposed wording for `docs/DESIGN.md` (not applied)
+## 11. Wording for `docs/DESIGN.md` (applied)
 
-These are the exact edits the owner would approve. Nothing below is changed in this pull request.
+These edits were applied to `docs/DESIGN.md` in this change. They are the exact edits the owner
+approved.
 
 ### 11.1 §3 locked decisions
 
