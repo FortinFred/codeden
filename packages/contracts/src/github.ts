@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { GitHubIssueRef, GitHubPrRef, Id, Timestamp } from "./common";
+import { ForgeProvider } from "./forge";
 
 /**
  * GitHub issue and pull request flow (§9): projections synced from GitHub, the events the
@@ -21,6 +22,13 @@ export const GithubConnection = z.object({
   login: z.string().nullable(),
   /** Why it is not connected, e.g. "Run `gh auth login`". */
   message: z.string().nullable(),
+  /**
+   * Which forge answered, once there is more than one (`docs/forges.md` §4.1). Absent on
+   * responses written before forges existed, and null when an old GitHub connection didn't say.
+   */
+  provider: ForgeProvider.nullable().optional(),
+  /** The forge's web host, e.g. `github.com` or `forge.example.com:3000`. */
+  host: z.string().nullable().optional(),
 });
 export type GithubConnection = z.infer<typeof GithubConnection>;
 
@@ -126,6 +134,13 @@ export const GithubReview = z.object({
   body: z.string(),
   submittedAt: Timestamp.nullable(),
   url: z.string().nullable(),
+  /**
+   * Forgejo: the review counts for branch protection (`official`, `docs/forges.md` §5.6).
+   * Absent on GitHub reviews and on rows stored before forges existed.
+   */
+  official: z.boolean().optional(),
+  /** Forgejo: the head moved since the review was submitted. Absent on GitHub reviews. */
+  stale: z.boolean().optional(),
 });
 export type GithubReview = z.infer<typeof GithubReview>;
 
@@ -408,3 +423,17 @@ export const SessionGithubResponse = z.object({
   pr: GithubPr.nullable(),
 });
 export type SessionGithubResponse = z.infer<typeof SessionGithubResponse>;
+
+// ---------------------------------------------------------------- forge aliases
+
+/**
+ * Provider-neutral names for the GitHub entities a forge returns (`docs/forges.md` §4.1).
+ * They are aliases, not new shapes: the persisted issue, PR, review and checks payloads stay
+ * exactly as they are, so a Forgejo project can reuse the same tables and events without moving
+ * every existing payload. A later mechanical rename can drop the `Github` prefix.
+ */
+export type ForgeIssue = GithubIssue;
+export type ForgePr = GithubPr;
+export type ForgeReview = GithubReview;
+export type ForgeChecksSummary = GithubChecksSummary;
+export type ForgeConnection = GithubConnection;

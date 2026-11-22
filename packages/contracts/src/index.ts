@@ -34,6 +34,7 @@ export * from "./factory-prs";
 export * from "./factory-retry";
 export * from "./factory-scorecard";
 export * from "./factory-spot-checks";
+export * from "./forge";
 export * from "./form-answers";
 export * from "./github";
 export * from "./hook-output";

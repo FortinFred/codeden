@@ -1,3 +1,5 @@
+import type { ForgeErrorCode } from "@codeden/contracts";
+
 /** HTTP status codes services may signal. */
 export type ServiceStatus = 400 | 403 | 404 | 409 | 413 | 415 | 422 | 500 | 502 | 503;
 
@@ -28,4 +30,32 @@ export const forbidden = (message: string, code = "forbidden") =>
 /** Human-readable message of any thrown value. */
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** The HTTP status a forge failure is reported as; the code is the machine-readable contract. */
+const FORGE_STATUS: Record<ForgeErrorCode, ServiceStatus> = {
+  forge_not_connected: 409,
+  forge_not_found: 404,
+  forge_forbidden: 403,
+  forge_conflict: 409,
+  forge_validation: 422,
+  forge_not_allowed: 409,
+  forge_rate_limited: 503,
+  forge_unavailable: 502,
+};
+
+/**
+ * A failure while talking to a forge (`docs/forges.md` §4.1). Its code is one of the
+ * `ForgeErrorCode`s in contracts, so callers never parse a provider's message. Messages must
+ * never contain a token; the Forgejo client scrubs its own before throwing.
+ */
+export class ForgeError extends ServiceError {
+  constructor(
+    readonly forgeCode: ForgeErrorCode,
+    message: string,
+    status: ServiceStatus = FORGE_STATUS[forgeCode],
+  ) {
+    super(status, forgeCode, message);
+    this.name = "ForgeError";
+  }
 }
