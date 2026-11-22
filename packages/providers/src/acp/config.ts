@@ -26,20 +26,26 @@ export function agentCan(
 }
 
 /** Why some MCP servers are missing from a session, if any are. */
-export function skippedNotice(label: string, skipped: readonly string[]): string | undefined {
+export function skippedNotice(
+  label: string,
+  skipped: readonly string[],
+  what = "HTTP MCP servers",
+): string | undefined {
   if (!skipped.length) return undefined;
   const verb = skipped.length === 1 ? "is" : "are";
-  return `${label} can't connect to HTTP MCP servers, so ${skipped.join(", ")} ${verb} not available in this session.`;
+  return `${label} can't connect to ${what}, so ${skipped.join(", ")} ${verb} not available in this session.`;
 }
 
 /**
  * CodeDen's MCP servers in ACP's shape. HTTP servers (CodeDen's own proxy among them) go only
- * to agents that report `mcpCapabilities.http`; the names of those left out are returned so
- * the session can say so.
+ * to agents that report `mcpCapabilities.http`; agents that can't start stdio servers
+ * (`allow.stdio === false`) get none of those either. The names of servers left out are returned
+ * so the session can say so.
  */
 export function acpMcpServers(
   servers: readonly McpServerConfig[],
   http: boolean,
+  allow: { stdio?: boolean } = {},
 ): { servers: AcpMcpServer[]; skipped: string[] } {
   const out: AcpMcpServer[] = [];
   const skipped: string[] = [];
@@ -55,6 +61,10 @@ export function acpMcpServers(
         url: server.url,
         headers: Object.entries(server.headers ?? {}).map(([name, value]) => ({ name, value })),
       });
+      continue;
+    }
+    if (allow.stdio === false) {
+      skipped.push(server.name);
       continue;
     }
     out.push({

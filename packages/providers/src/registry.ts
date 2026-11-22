@@ -2,6 +2,7 @@ import type { ProviderInfo } from "@codeden/contracts";
 import { type ProviderAdapter, providerInfo, type RefreshModelsOptions } from "./adapter";
 import { ClaudeAdapter } from "./claude/adapter";
 import { CodexAdapter } from "./codex/adapter";
+import { CopilotAdapter } from "./copilot/adapter";
 import { CursorAdapter } from "./cursor/adapter";
 import { GeminiAdapter } from "./gemini/adapter";
 import { OpenCodeAdapter } from "./opencode/adapter";
@@ -61,7 +62,7 @@ export class ProviderRegistry {
   }
 }
 
-/** Fresh instances of the built-in real providers (Claude Code, Codex, OpenCode, Cursor, Gemini CLI). */
+/** Fresh instances of the built-in real providers (Claude Code, Codex, OpenCode, Cursor, Gemini CLI, Copilot CLI). */
 export function builtinProviders(): ProviderAdapter[] {
   return [
     new ClaudeAdapter(),
@@ -69,6 +70,7 @@ export function builtinProviders(): ProviderAdapter[] {
     new OpenCodeAdapter(),
     new CursorAdapter(),
     new GeminiAdapter(),
+    new CopilotAdapter(),
   ];
 }
 

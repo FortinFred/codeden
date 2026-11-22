@@ -9,10 +9,11 @@ Provider adapters behind one normalized interface (`ProviderAdapter` / `Provider
 | `opencode` | A private `opencode serve --stdio` per session, v2 HTTP API + SSE events | Tested with OpenCode 2.2.7 (minimum 2.2.0); route types in `src/opencode/protocol.ts` |
 | `cursor` | The Cursor CLI's ACP server (`agent acp`), one per session, through the generic ACP client in `src/acp/` | Agent Client Protocol version 1, typed by hand in `src/acp/protocol.ts`; Cursor's extensions in `src/cursor/extensions.ts` |
 | `gemini` | Gemini CLI's ACP server (`gemini --acp`), one per session, through the same generic ACP client | Minimum 0.68.0 (tested against its 0.68 ACP server); its vendor fields and plan approval in `src/gemini/extensions.ts` |
+| `copilot` | Copilot CLI's ACP server (`copilot --acp`), one per session, through the same generic ACP client | Minimum 1.0.105 (older builds ran ACP tools without asking); models read from `copilot help config`, `session/new` is the sign-in check, and its ACP server starts HTTP MCP servers only |
 | `fake` | Scripted, deterministic | Demos and tests |
 | `replay` | Plays back recorded fixtures | Contract tests; never spawns a CLI |
 
-`getProvider(id)` / `listProviders()` return the built-in real adapters. Each adapter except Cursor and Gemini CLI also exposes `utilityModel()` for tool-less one-shots (§7.4). `ApprovalBroker` and the risky-action classifier (`src/policy/`) are provider-neutral.
+`getProvider(id)` / `listProviders()` return the built-in real adapters. Each adapter except Cursor, Gemini CLI and Copilot CLI also exposes `utilityModel()` for tool-less one-shots (§7.4). `ApprovalBroker` and the risky-action classifier (`src/policy/`) are provider-neutral.
 
 ## Scripts
 

@@ -33,6 +33,7 @@ const FIXED_SLOTS: Record<string, number> = {
   opencode: 2,
   cursor: 3,
   gemini: 4,
+  copilot: 5,
 };
 
 /**

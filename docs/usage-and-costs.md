@@ -22,9 +22,9 @@ The ledger lives in your local database, never anywhere else.
 |---|---|
 | **Reported** | The provider returned a USD cost for the turn |
 | **Estimated** (shown with ≈) | Tokens multiplied by the price table for that model |
-| **API-equivalent** | You're on a subscription login (claude.ai, ChatGPT, Cursor or a Google login in Gemini CLI): this is what the same work would cost on API credits, not what you're billed |
+| **API-equivalent** | You're on a subscription login (claude.ai, ChatGPT, Cursor, a Google login in Gemini CLI or Copilot CLI): this is what the same work would cost on API credits, not what you're billed |
 
-The billing mode comes from how each CLI reports its login: API keys and console accounts are pay-per-token; claude.ai, ChatGPT and Cursor logins are subscriptions (a Cursor API key bills your Cursor plan too). Gemini CLI's Google login counts as a subscription; its Gemini API key and Vertex AI logins pay per token. OpenCode reports how each of its providers is connected (API key, OAuth, environment).
+The billing mode comes from how each CLI reports its login: API keys and console accounts are pay-per-token; claude.ai, ChatGPT, Cursor and Copilot logins are subscriptions (a Cursor API key bills your Cursor plan too). Gemini CLI's Google login counts as a subscription; its Gemini API key and Vertex AI logins pay per token. OpenCode reports how each of its providers is connected (API key, OAuth, environment).
 
 ### The price table
 
@@ -34,7 +34,7 @@ OpenCode usually reports each turn's cost itself. When it doesn't (OpenCode's fr
 
 Cursor bills through your Cursor plan and reports no prices, so its turns show the token counts and context use the CLI reports (when it reports them) and count as **unpriced**. Add a price under provider `cursor` if you want an estimate.
 
-Gemini CLI reports each turn's tokens (cached and thinking tokens included) and its context use, but no cost. Add prices under provider `gemini` for the models you use if you want estimates; until then its turns count as **unpriced**.
+Gemini CLI reports each turn's tokens (cached and thinking tokens included) and its context use, but no cost. Add prices under provider `gemini` for the models you use if you want estimates; until then its turns count as **unpriced**. Copilot CLI reports each prompt's input, output, cached and thinking tokens, but what it bills is AI credits, not tokens; add prices under provider `copilot` if you want API-equivalent estimates.
 
 ## Reports
 

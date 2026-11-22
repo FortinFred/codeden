@@ -89,7 +89,7 @@ export interface CheckRuns {
 }
 
 /** Preferred providers when the choice is `auto` (first ready one wins). */
-const AUTO_ORDER = ["claude", "codex", "opencode", "cursor", "gemini"];
+const AUTO_ORDER = ["claude", "codex", "opencode", "cursor", "gemini", "copilot"];
 
 const BUSY = new Set(["running", "waiting"]);
 const NOT_STARTED = new Set(["created", "queued", "starting"]);
