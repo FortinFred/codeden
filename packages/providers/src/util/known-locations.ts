@@ -56,6 +56,19 @@ export function knownLocations(name: string, opts: KnownLocationOptions = {}): s
       // Homebrew (`brew install gemini-cli`), for apps started from the macOS Finder; npm's
       // global folder is on PATH.
       return platform === "darwin" ? ["/opt/homebrew/bin/gemini", "/usr/local/bin/gemini"] : [];
+    case "copilot": {
+      // Its install script: `~/.local/bin` (or `/usr/local/bin` as root); Homebrew's cask and
+      // npm's global folder are on PATH, and the Finder may not see Homebrew's.
+      if (win) {
+        const local = env.LOCALAPPDATA || p.join(home, "AppData", "Local");
+        return [p.join(local, "Microsoft", "WinGet", "Links", "copilot.exe")];
+      }
+      return [
+        p.join(home, ".local", "bin", "copilot"),
+        "/usr/local/bin/copilot",
+        ...(platform === "darwin" ? ["/opt/homebrew/bin/copilot"] : []),
+      ];
+    }
     case "gh":
       if (win) {
         const programFiles = env.ProgramFiles || "C:\\Program Files";

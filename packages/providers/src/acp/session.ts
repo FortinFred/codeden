@@ -291,8 +291,15 @@ export class AcpSession implements ProviderSession {
   /** `session/load` the resume token when the agent can; else (or when that fails) a new one. */
   private async openSession(rpc: AcpRpc): Promise<void> {
     const { label } = this.config.spec;
-    const { servers, skipped } = acpMcpServers(this.opts.mcpServers, agentCan(this.info, "http"));
-    this.addNotice(skippedNotice(label, skipped));
+    const transports = this.config.spec.mcpTransports;
+    const { servers, skipped } = acpMcpServers(
+      this.opts.mcpServers,
+      agentCan(this.info, "http"),
+      transports ?? {},
+    );
+    this.addNotice(
+      skippedNotice(label, skipped, transports?.stdio === false ? "stdio MCP servers" : undefined),
+    );
     // `session/load` replays the history first, mode and config updates included: none of it
     // is news, and a replayed mode change must not end plan mode.
     this.mapper.replaying = true;

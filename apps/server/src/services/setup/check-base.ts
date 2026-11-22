@@ -1,4 +1,5 @@
 import type { SetupCheck, SetupCommand, SetupToolId } from "@codeden/contracts";
+import type { CopilotProbe, ResolvedCommand } from "@codeden/providers";
 import { cursorInstallCommand, GEMINI_INSTALL_COMMAND } from "@codeden/providers";
 import type { Exec } from "../exec";
 import type { BrowserProbe } from "./browsers";
@@ -12,6 +13,7 @@ const LABELS: Record<SetupToolId, string> = {
   opencode: "OpenCode",
   cursor: "Cursor",
   gemini: "Gemini CLI",
+  copilot: "Copilot CLI",
   gh: "GitHub CLI",
   git: "git",
   browser: "Browser",
@@ -39,6 +41,12 @@ export function installFix(id: SetupToolId, platform: NodeJS.Platform): SetupCom
       };
     case "gemini":
       return { kind: "install", command: GEMINI_INSTALL_COMMAND, url: "https://geminicli.com" };
+    case "copilot":
+      return {
+        kind: "install",
+        command: "npm install -g @github/copilot",
+        url: "https://docs.github.com/copilot/how-tos/set-up/install-copilot-cli",
+      };
     case "gh":
       return {
         kind: "install",
@@ -108,4 +116,9 @@ export interface CheckEnv {
   userHome?: string;
   /** Read for which login variables are set, never their values (default: `process.env`). */
   env?: NodeJS.ProcessEnv;
+  /**
+   * Starts Copilot CLI's ACP server once for its check (tests: no real process). Default
+   * `probeCopilot`.
+   */
+  copilotProbe?: (exe: ResolvedCommand) => Promise<CopilotProbe>;
 }

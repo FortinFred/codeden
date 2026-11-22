@@ -44,7 +44,7 @@ A short tour of how CodeDen is put together. The full, locked design is in [DESI
   - **Claude Code** through the Claude Agent SDK, pointed at your installed `claude` binary so it inherits your login and settings.
   - **Codex** through `codex app-server` over JSON-RPC, with protocol types generated from the installed Codex.
   - **OpenCode** through a private `opencode serve` per session, over its HTTP API and event stream.
-  - **Cursor** (`agent acp`) and **Gemini CLI** (`gemini --acp`) through their Agent Client Protocol servers, on one generic ACP client (`packages/providers/src/acp`) that each adapter configures.
+  - **Cursor** (`agent acp`), **Gemini CLI** (`gemini --acp`) and **Copilot CLI** (`copilot --acp`) through their Agent Client Protocol servers, on one generic ACP client (`packages/providers/src/acp`) that each adapter configures.
   - **Fake** and **Replay** providers for deterministic tests and demos.
 - **Honest capabilities.** Each adapter declares what it supports (resume, steer, interrupt, approvals, subagents, images, ...). The UI and orchestration read those flags and never branch on a provider's name.
 - **The MCP path.** Agents call a local MCP proxy inside the runner (`http://127.0.0.1:<runnerPort>/mcp`), which forwards to the server's `/mcp` with the session's role-scoped token. A remote runner's proxy sends the same requests over its runner link instead, and the server answers them in-process with the same token check ([remote-runners.md](remote-runners.md) §11). One tool registry serves both the agents (over MCP) and the UI's API handlers, so they can't drift apart.

@@ -4,15 +4,15 @@ import { type PathContext, resolveAgainst } from "./paths";
 import type { SimpleCommand } from "./shell";
 
 /**
- * Agents' own permission files (§11.2). Cursor and Gemini CLI run what their allow-lists permit
- * without asking, so CodeDen never sees those calls. An agent that writes one (`echo … >
- * .cursor/cli.json`) would turn CodeDen's approvals off for itself and, once the file is merged,
- * for every later session in the project. So writing one asks at every level, Full included,
- * whichever agent writes it and wherever it is: the worktree, a folder in it, or the user's own
- * configuration.
+ * Agents' own permission files (§11.2). Cursor, Gemini CLI and Copilot CLI run what their
+ * allow-lists and saved approvals permit without asking, so CodeDen never sees those calls. An
+ * agent that writes one (`echo … > .cursor/cli.json`) would turn CodeDen's approvals off for
+ * itself and, once the file is merged, for every later session in the project. So writing one
+ * asks at every level, Full included, whichever agent writes it and wherever it is: the
+ * worktree, a folder in it, or the user's own configuration.
  */
 
-type Owner = "Cursor" | "Gemini CLI";
+type Owner = "Cursor" | "Gemini CLI" | "Copilot CLI";
 
 /** A path that holds an agent's permissions: one of its files, or a folder that holds them. */
 export interface PermissionPath {
@@ -28,7 +28,9 @@ export interface PermissionPath {
  * - Gemini CLI: `settings.json` and `trustedFolders.json` in `.gemini` (a project's or the
  *   user's), the system `settings.json` and `system-defaults.json` in `gemini-cli`, and any
  *   policy file in `.gemini/policies` or `gemini-cli/policies`;
- * - the `.cursor` and `.gemini` folders themselves.
+ * - Copilot CLI: `.github/copilot/settings.json` (a project's) and
+ *   `permissions-config.json` in `.copilot` (the user's saved approvals);
+ * - the `.cursor`, `.gemini` and `.copilot` folders themselves.
  */
 export function agentPermissionPath(target: string, ctx: PathContext): PermissionPath | undefined {
   const parts = resolveAgainst(target, ctx)
@@ -38,6 +40,7 @@ export function agentPermissionPath(target: string, ctx: PathContext): Permissio
     .filter(Boolean);
   const base = parts.at(-1) ?? "";
   const parent = parts.at(-2);
+  const grandparent = parts.at(-3);
   const file = (owner: Owner) => ({ owner, folder: false });
   if (parent === ".cursor" && (base === "cli.json" || base === "cli-config.json")) {
     return file("Cursor");
@@ -49,12 +52,17 @@ export function agentPermissionPath(target: string, ctx: PathContext): Permissio
   if (parent === "gemini-cli" && (base === "settings.json" || base === "system-defaults.json")) {
     return file("Gemini CLI");
   }
+  if (grandparent === ".github" && parent === "copilot" && base === "settings.json") {
+    return file("Copilot CLI");
+  }
+  if (parent === ".copilot" && base === "permissions-config.json") return file("Copilot CLI");
   const policies = parts.findIndex(
     (p, i) => p === "policies" && (parts[i - 1] === ".gemini" || parts[i - 1] === "gemini-cli"),
   );
   if (policies >= 0) return { owner: "Gemini CLI", folder: policies === parts.length - 1 };
   if (base === ".cursor") return { owner: "Cursor", folder: true };
   if (base === ".gemini") return { owner: "Gemini CLI", folder: true };
+  if (base === ".copilot") return { owner: "Copilot CLI", folder: true };
   return undefined;
 }
 
@@ -79,7 +87,7 @@ export function agentPermissionsWrite(
 
 /** A permission file named in code (`'.cursor/cli.json'`, `".gemini\\settings.json"`). */
 const MENTION =
-  /\.(cursor)[\\/]+cli(-config)?\.json|\.(gemini)[\\/]+(settings\.json|trustedfolders\.json|policies)/i;
+  /\.cursor[\\/]+cli(-config)?\.json|\.gemini[\\/]+(settings\.json|trustedfolders\.json|policies)|\.github[\\/]+copilot[\\/]+settings\.json|\.copilot[\\/]+permissions-config\.json/i;
 
 /**
  * One simple command's write of an agent's permissions: a redirect onto one, inline code that
@@ -96,7 +104,13 @@ export function agentPermissionsCommand(
     write: (path) => agentPermissionsWrite(path, ctx),
     mention: (code) => {
       const named = MENTION.exec(code);
-      return named ? agentPermissionsRisk(named[1] ? "Cursor" : "Gemini CLI", named[0]) : undefined;
+      if (!named) return undefined;
+      const owner: Owner = /copilot/i.test(named[0])
+        ? "Copilot CLI"
+        : /gemini/i.test(named[0])
+          ? "Gemini CLI"
+          : "Cursor";
+      return agentPermissionsRisk(owner, named[0]);
     },
   });
 }

@@ -37,6 +37,7 @@ export const LOGIN_COMMANDS = {
   cursor: ["agent", "login"],
   // Gemini CLI has no login command: started on its own, it asks how to sign in.
   gemini: ["gemini"],
+  copilot: ["copilot", "login"],
   gh: ["gh", "auth", "login", "--web", "--git-protocol", "https"],
 } as const satisfies Record<LoginToolId, readonly string[]>;
 
