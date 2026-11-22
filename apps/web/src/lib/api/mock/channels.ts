@@ -33,6 +33,11 @@ const loginScript: Record<string, string[]> = {
     "Opening browser to sign in to Cursor…",
     `${c.green}✓ Logged in as leon@example.com${c.reset}`,
   ],
+  "copilot login": [
+    `${c.dim}Authenticating with Copilot via OAuth…${c.reset}`,
+    "Opening browser to authorize…",
+    `${c.green}✓ Signed in successfully as leon.${c.reset}`,
+  ],
   "claude auth login": [
     "Opening browser to sign in…",
     `${c.green}✓ Logged in as leon@example.com${c.reset}`,

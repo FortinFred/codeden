@@ -2,6 +2,7 @@ import type { SetupToolId } from "@codeden/contracts";
 import { CLAUDE_MIN_VERSION, CODEX_MIN_VERSION, isElectronRuntime } from "@codeden/providers";
 import { detectBrowser } from "./browsers";
 import { base, type CheckEnv, type CheckResult, installFix, MIN_NODE_MAJOR } from "./check-base";
+import { checkCopilot } from "./check-copilot";
 import { checkCursor } from "./check-cursor";
 import { checkGemini } from "./check-gemini";
 import {
@@ -365,6 +366,7 @@ export const CHECKS: Record<SetupToolId, (env: CheckEnv) => Promise<CheckResult>
   opencode: checkOpenCode,
   cursor: checkCursor,
   gemini: checkGemini,
+  copilot: checkCopilot,
   gh: checkGh,
   git: checkGit,
   browser: checkBrowser,

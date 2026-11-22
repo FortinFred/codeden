@@ -30,6 +30,7 @@ Every agent process gets the runner's environment minus CodeDen's own variables 
 | OpenCode | Its own config and data folders; CodeDen layers `OPENCODE_CONFIG_CONTENT` on top (`opencode/server.ts`) | Its own `auth.json` per connected provider, or provider keys in the environment | Its own database. CodeDen archives each session on create and on resume (`opencode/session.ts`) |
 | Cursor | `~/.cursor` | `agent login`, or `CURSOR_API_KEY` / `CURSOR_AUTH_TOKEN` | Chats are likely listed across workspaces by `agent ls` and `/resume` (#277, unverified) |
 | Gemini CLI | `~/.gemini`; `GEMINI_CLI_HOME` moves it (`gemini/auth.ts`) | `oauth_creds.json` or the system keychain, or `GEMINI_API_KEY` and the other login variables | Per project folder; worktrees are separate folders |
+| Copilot CLI | `~/.copilot`; `COPILOT_HOME` moves it | Its login in the system credential store (`copilot login`), a plain `hosts.yml` in its folder when no store is available, or `COPILOT_GITHUB_TOKEN` / `GH_TOKEN` / `GITHUB_TOKEN` | Its own `session-store.db` in `~/.copilot`; an empty ACP session saves nothing |
 
 One-shot jobs (the utility model, image generation through Codex) start Codex threads with `ephemeral: true` (`codex/one-shot.ts`, `image/codex-turn.ts`), so they leave no history.
 
@@ -123,6 +124,7 @@ D makes every user install Docker before their first session and build or downlo
 | OpenCode | its config and data folders | `opencode.json` and its agents and commands | Provider keys in the environment, else an `auth.json` copy | CodeDen's inline config still layers on top |
 | Cursor | to be found (#277) | `cli-config.json` without permission rules | `CURSOR_API_KEY` | Without a variable that moves its home, a sandbox session uses the image's empty home and the key |
 | Gemini CLI | `GEMINI_CLI_HOME` | `settings.json` (auth type, MCP servers), `GEMINI.md`, policies | `GEMINI_API_KEY`, else an `oauth_creds.json` copy | CodeDen's admin policy files stay in the runner's `gemini/` folder |
+| Copilot CLI | `COPILOT_HOME` | `settings.json` and `mcp-config.json`, without saved approvals (`permissions-config.json`) or `allowedUrls` | `COPILOT_GITHUB_TOKEN`, else a login-copy broker | Saved approvals would run tools without asking, so they stay out |
 
 Copying an agent's allow-list files into a sandbox follows §11.2: rules the user wrote come with the config, and the start warning still applies.
 
@@ -205,7 +207,7 @@ These are checked in the issues:
 | Claude Code | Agent SDK `query()` with streaming input, over the user's `claude` | `claude -p --session-id/--resume` per turn | **Resume:** the same session files. **Fork:** `--fork-session` exists, but without `upToMessageId`. **Subagents:** `stream-json` still tags `parent_tool_use_id`, but the SDK's transcript readers are gone. **Permissions:** `canUseTool` and the in-process PreToolUse hook (read-only and plan-mode rules) become `--permission-prompt-tool` and hooks in a settings file. **Steering:** lost. **Interrupt:** killing the turn's process. **Startup:** the CLI starts and MCP reconnects on every turn |
 | Codex | `codex app-server` | `codex exec --json` per turn | Loses approvals and escalations through the classifier, steering, elicitations, sub-agent threads and `thread/fork` |
 | OpenCode | A private `opencode serve` per session | `opencode run` | Loses permission asks, questions and the event stream |
-| Cursor, Gemini CLI | ACP | Their print modes | Lose permission requests, plan approval and session load |
+| Cursor, Gemini CLI, Copilot CLI | ACP | Their print modes | Lose permission requests, plan approval and session load |
 
 **Keep the SDK and the protocol adapters.** A provider home needs only an environment variable, which every adapter already passes (`claudeEnv` merges `SessionOptions.env`). The only Claude-specific cost is the SDK helpers in §4.3. `persistSession: false` would break resume and fork. `sessionStore` (alpha in SDK 0.3.318) mirrors transcripts to a store CodeDen owns. That is a later option so a conversation can survive a lost sandbox (remote-runners phase 7).
 
@@ -226,7 +228,7 @@ These are issue drafts for the PM to file once the user decides. Issue 1 doesn't
 **Title:** `fix(providers): treat provider login files as secrets the risk classifier always asks about`
 
 **Scope.**
-- The files: Claude's `.credentials.json` in its config folder, Codex's `auth.json` in `CODEX_HOME`, Gemini CLI's `oauth_creds.json`, OpenCode's `auth.json` in its data folder, and gh's `hosts.yml`, wherever they are, including `agent-homes/**`.
+- The files: Claude's `.credentials.json` in its config folder, Codex's `auth.json` in `CODEX_HOME`, Gemini CLI's `oauth_creds.json`, OpenCode's `auth.json` in its data folder, Copilot CLI's `hosts.yml` in `.copilot` and the Copilot apps' `auth.db`, and gh's `hosts.yml`, wherever they are, including `agent-homes/**`.
 - Reading, copying, searching, listing by name or writing one asks at every level, Full included, and is refused for read-only sessions, like `CODEDEN_CREDENTIAL_FILES`.
 - `attach_evidence` and `share_to_chat` refuse them.
 - Docs: DESIGN §11.2 and `docs/security.md`.
@@ -345,7 +347,7 @@ Nothing in this section is in `docs/DESIGN.md`. It is the wording this proposal 
 **§15 Security**, add:
 
 > - **Provider homes are hygiene, not a sandbox.** A per-session home keeps provider state and history apart. The agent still runs as its runner's user, and containers are the isolation boundary.
-> - **Provider login files** ask at every level, like CodeDen's own credential files. They are Claude's `.credentials.json`, Codex's `auth.json`, Gemini CLI's `oauth_creds.json`, OpenCode's `auth.json`, gh's `hosts.yml`, and every copy in `agent-homes/`.
+> - **Provider login files** ask at every level, like CodeDen's own credential files. They are Claude's `.credentials.json`, Codex's `auth.json`, Gemini CLI's `oauth_creds.json`, OpenCode's `auth.json`, Copilot CLI's `hosts.yml` and `auth.db`, gh's `hosts.yml`, and every copy in `agent-homes/`.
 
 **§21 Risks**, add a row:
 

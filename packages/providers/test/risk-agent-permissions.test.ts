@@ -35,6 +35,8 @@ const PROJECT_FILES = [
   ".gemini/policies/allow.toml",
   "packages/app/.gemini/settings.json",
   ".Cursor/CLI.json",
+  ".github/copilot/settings.json",
+  "packages/app/.github/copilot/settings.json",
 ];
 
 const asks = (command: string, ctx: RiskContext = posix) => {
@@ -76,6 +78,9 @@ describe("agent permission files (#232)", () => {
       `python3 -c "open('.gemini/settings.json','w').write('{}')"`,
       "cd .cursor && echo x > cli.json",
       `bash -c "echo x > .cursor/cli.json"`,
+      `echo '{"allowedUrls":["https://*"]}' > .github/copilot/settings.json`,
+      `cp /tmp/allow.json ~/.copilot/permissions-config.json`,
+      `node -e "require('fs').writeFileSync('.github/copilot/settings.json', process.argv[1])" x`,
     ]) {
       expect(asks(command), command).toBe(true);
     }

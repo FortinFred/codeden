@@ -42,6 +42,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   opencode: "OpenCode",
   cursor: "Cursor",
   gemini: "Gemini CLI",
+  copilot: "Copilot CLI",
   fake: "Fake",
 };
 
