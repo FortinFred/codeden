@@ -9,6 +9,7 @@ import type {
   CreateProjectResponse,
   DiffResult,
   DiffScope,
+  DisconnectForgeResponse,
   DisconnectGithubResponse,
   DismissInboxResponse,
   ExecutionBackendsResponse,
@@ -69,6 +70,7 @@ import type { FactoryApi } from "./factory-api";
 import type {
   AgentConfigApi,
   BrowserApi,
+  ForgesApi,
   GithubApi,
   ImagesApi,
   OrchestrationApi,
@@ -247,6 +249,8 @@ export interface CodeDenClient {
   refreshProject(projectId: string): Promise<RefreshProjectResponse>;
   /** Make a GitHub project local-only, once its folder no longer has a GitHub `origin`. */
   disconnectGithub(projectId: string): Promise<DisconnectGithubResponse>;
+  /** Make a forge project local-only (`docs/forges.md` §7), clearing its coordinates and warning. */
+  disconnectForge(projectId: string): Promise<DisconnectForgeResponse>;
   readonly automations: AutomationsApi;
   /** Autonomy modes, the vision, the factory panel and kill switches (§10.1, experimental). */
   readonly factory: FactoryApi;
@@ -319,7 +323,8 @@ export interface CodeDenClient {
   readonly images: ImagesApi;
   readonly voice: VoiceApi;
 
-  // Orchestration (§8) and GitHub (§9).
+  // Orchestration (§8), GitHub and other forges (§9, `docs/forges.md`).
   readonly orchestration: OrchestrationApi;
   readonly github: GithubApi;
+  readonly forges: ForgesApi;
 }

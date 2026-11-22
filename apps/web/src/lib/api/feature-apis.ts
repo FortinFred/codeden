@@ -19,6 +19,10 @@ import type {
   BrowserTabsResponse,
   BrowserViewportSize,
   DevServersResponse,
+  ForgeConnectionStatus,
+  ForgejoConnectionRequest,
+  ForgejoTestRequest,
+  ForgesResponse,
   GithubConnection,
   GithubIssueDetails,
   GithubIssuesResponse,
@@ -216,6 +220,22 @@ export interface OrchestrationApi {
     target?: OrchestrationRole;
     limit?: number;
   }): Promise<Notice[]>;
+}
+
+// ------------------------------------------------------------------ forges (`docs/forges.md`)
+
+/**
+ * `/api/forges`: the configured forge connections (phase A1: one Forgejo instance). A status
+ * never carries the token; the `PUT` body's `token` is write-only and goes to the OS keychain.
+ */
+export interface ForgesApi {
+  list(): Promise<ForgesResponse>;
+  /** Save the connection (and its write-only token, when given) and report the resulting status. */
+  saveForgejo(req: ForgejoConnectionRequest): Promise<ForgeConnectionStatus>;
+  /** Test a connection, saved or from the form, without writing anything. */
+  testForgejo(req?: ForgejoTestRequest): Promise<ForgeConnectionStatus>;
+  /** Remove the connection and its token. */
+  removeForgejo(): Promise<ForgeConnectionStatus>;
 }
 
 // ------------------------------------------------------------------ GitHub (§9)
