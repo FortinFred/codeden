@@ -15,6 +15,8 @@ import { InboxItem, InboxItemKind, InboxItemStatus } from "./entities/inbox";
 import { GitHubRepo, Project } from "./entities/project";
 import { ItemRecord, Session, SessionStatus, Thread, Turn } from "./entities/session";
 import { ProjectExecutionBackend } from "./execution";
+import { ForgeRepo } from "./forge";
+import { ForgeConnectionStatus } from "./github";
 import { UserInput } from "./input";
 import { FollowupsItem } from "./items";
 import { BrokenExecutable, ProviderInfo, RuntimeResponse } from "./provider";
@@ -72,6 +74,8 @@ export const ProjectDetection = z.object({
   gitRoot: z.string().nullable(),
   remoteUrl: z.string().nullable(),
   github: GitHubRepo.nullable(),
+  /** The configured Forgejo repository this remote matches (`docs/forges.md` §7), if any. */
+  forge: ForgeRepo.nullable(),
   defaultBranch: z.string().nullable(),
   currentBranch: z.string().nullable(),
   packageManager: PackageManager.nullable(),
@@ -125,6 +129,34 @@ export type ReorderProjectsRequest = z.infer<typeof ReorderProjectsRequest>;
 /** `PUT /api/projects/order` response: the non-archived projects in their new order. */
 export const ReorderProjectsResponse = z.object({ projects: z.array(Project) });
 export type ReorderProjectsResponse = z.infer<typeof ReorderProjectsResponse>;
+
+// ---------------------------------------------------------------- forges
+
+/**
+ * `PUT /api/forges/forgejo`: the connection's non-secret settings, plus an optional token to
+ * write to the OS keychain (`forgejo.token`). The token is write-only and is never returned.
+ */
+export const ForgejoConnectionRequest = z.object({
+  baseUrl: z.url(),
+  /** The SSH host (and optional port) a matching `origin` may use. */
+  sshHost: z.string().trim().min(1).max(255).optional(),
+  /** Allow plain HTTP to a public host; loopback and private addresses are allowed anyway. */
+  allowInsecureHttp: z.boolean().optional(),
+  /** A new token to store; omit to keep the one already in the keychain. */
+  token: z.string().min(1).max(10_000).optional(),
+});
+export type ForgejoConnectionRequest = z.infer<typeof ForgejoConnectionRequest>;
+
+/**
+ * `POST /api/forges/forgejo/test`: test a connection without saving it. Every field is optional;
+ * what is missing falls back to the saved settings and the stored token.
+ */
+export const ForgejoTestRequest = ForgejoConnectionRequest.partial();
+export type ForgejoTestRequest = z.infer<typeof ForgejoTestRequest>;
+
+/** `GET /api/forges`: every configured connection's status, never a token. */
+export const ForgesResponse = z.object({ forges: z.array(ForgeConnectionStatus) });
+export type ForgesResponse = z.infer<typeof ForgesResponse>;
 
 // ---------------------------------------------------------------- sessions
 
@@ -788,6 +820,8 @@ export const SecretKey = z.enum([
   "anthropic.apiKey",
   /** Fallback GitHub token when `gh auth token` is unavailable (§9). */
   "github.token",
+  /** The self-hosted Forgejo token (`docs/forges.md` §6.1); never stored in settings. */
+  "forgejo.token",
 ]);
 export type SecretKey = z.infer<typeof SecretKey>;
 

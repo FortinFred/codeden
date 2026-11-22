@@ -32,6 +32,27 @@ export const GithubConnection = z.object({
 });
 export type GithubConnection = z.infer<typeof GithubConnection>;
 
+/**
+ * The state of one configured forge connection (`GET /api/forges`, `docs/forges.md` §6.1),
+ * shaped like `GithubConnection` with the provider, host and version added. The token is never
+ * part of it: it is write-only, kept in the OS keychain as `forgejo.token`.
+ */
+export const ForgeConnectionStatus = z.object({
+  provider: ForgeProvider,
+  connected: z.boolean(),
+  /** The configured web base, no credentials, query or trailing slash. */
+  baseUrl: z.url().nullable(),
+  /** The web host CodeDen talks to, e.g. `forge.example.com:3000`. */
+  host: z.string().nullable(),
+  /** The token account's login; null when the token cannot read `/user` (a repository token). */
+  login: z.string().nullable(),
+  /** Why it is not connected, or a note when it is connected without a known login. */
+  message: z.string().nullable(),
+  /** The forge version `/version` reported, once connected. */
+  version: z.string().nullable(),
+});
+export type ForgeConnectionStatus = z.infer<typeof ForgeConnectionStatus>;
+
 /** Sync state of one GitHub project. */
 export const GithubSyncStatus = z.object({
   projectId: Id,

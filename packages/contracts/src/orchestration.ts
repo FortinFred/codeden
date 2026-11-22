@@ -269,7 +269,7 @@ export const ProjectStatus = z.object({
   project: z.object({
     id: Id,
     name: z.string(),
-    kind: z.enum(["github", "local"]),
+    kind: z.enum(["github", "forge", "local"]),
     /**
      * The project's autonomy mode: tells the PM who merges pull requests (the user in manual and
      * assisted, the factory loop in the software and dark factory).

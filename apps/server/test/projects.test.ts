@@ -52,6 +52,7 @@ describe("project detection helpers", () => {
 let dir: string;
 let database: Database;
 let service: ProjectService;
+let forgejo: { baseUrl: string; allowInsecureHttp: boolean } | null = null;
 
 const git = (cwd: string, ...args: string[]) =>
   execFileSync("git", ["-C", cwd, ...args], { stdio: "pipe" });
@@ -59,11 +60,13 @@ const git = (cwd: string, ...args: string[]) =>
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "codeden-projects-"));
   database = openDatabase(join(dir, "codeden.db"));
+  forgejo = null;
   service = new ProjectService({
     db: database.db,
     store: new EventStore(database.db),
     exec: runTool,
     projectsDir: join(dir, "clones"),
+    forgejo: () => forgejo,
   });
 });
 
@@ -119,6 +122,39 @@ describe("ProjectService", () => {
     await expect(
       service.create({ source: { type: "clone", url: pathToFileURL(origin).href } }),
     ).rejects.toMatchObject({ code: "destination_exists" });
+  });
+
+  it("connects a configured Forgejo origin and warns when the connection goes away", async () => {
+    const folder = join(dir, "forge-widgets");
+    mkdirSync(folder);
+    git(folder, "init", "-q", "-b", "main");
+    git(folder, "remote", "add", "origin", "https://forge.example.com/acme/widgets.git");
+    forgejo = { baseUrl: "https://forge.example.com", allowInsecureHttp: false };
+
+    const created = await service.create({ source: { type: "local", path: folder } });
+    expect(created.project).toMatchObject({
+      kind: "forge",
+      forge: {
+        provider: "forgejo",
+        baseUrl: "https://forge.example.com",
+        host: "forge.example.com",
+        owner: "acme",
+        repo: "widgets",
+        remoteUrl: "https://forge.example.com/acme/widgets.git",
+      },
+    });
+    expect(created.detected.forge).toEqual(
+      created.project.kind === "forge" ? created.project.forge : null,
+    );
+
+    // Without the connection the project keeps its coordinates and warns.
+    forgejo = null;
+    const refreshed = await service.refresh(created.project.id);
+    expect(refreshed).toMatchObject({ outcome: "forge_remote_missing", changed: true });
+    expect(service.get(created.project.id)).toMatchObject({
+      kind: "forge",
+      remoteWarning: { code: "forge_remote_missing" },
+    });
   });
 });
 

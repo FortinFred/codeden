@@ -22,6 +22,7 @@ import { automationRoutes, projectAutomationRoutes } from "./automations";
 import { browserRoutes, sessionBrowserRoutes } from "./browser";
 import { executionRoutes } from "./execution";
 import { factoryRoutes, projectFactoryRoutes } from "./factory";
+import { forgeRoutes } from "./forges";
 import { githubRoutes, projectGithubRoutes, prRoutes, sessionGithubRoutes } from "./github";
 import { imageRoutes } from "./images";
 import { inboxRoutes } from "./inbox";
@@ -81,6 +82,7 @@ export function createApi(ctx: ApiContext) {
       .route("/projects", projectGithubRoutes(s))
       .route("/projects", projectFactoryRoutes(s))
       .route("/factory", factoryRoutes(s))
+      .route("/forges", forgeRoutes(s))
       .route("/prs", prRoutes(s))
       .route("/github", githubRoutes(s))
       .route("/sessions", sessionGithubRoutes(s))

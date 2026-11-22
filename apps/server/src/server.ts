@@ -126,6 +126,8 @@ export interface StartServerOptions {
    * background polling (default on unless `CODEDEN_GITHUB_SYNC=0`).
    */
   github?: ServicesOptions["github"] & { sync?: boolean };
+  /** Forgejo connection transport (tests inject a scripted client). */
+  forgejo?: ServicesOptions["forgejo"];
   /** Automations (§10): clock, scheduler timings and file rescans for tests. */
   automations?: ServicesOptions["automations"];
   /** Factory loop (§10.1): tick interval, background ticking, a scripted GitHub for tests. */
@@ -257,6 +259,7 @@ export async function startServer(opts: StartServerOptions): Promise<RunningServ
     localStt: opts.localStt,
     orchestration: opts.orchestration,
     github: opts.github,
+    forgejo: opts.forgejo,
     automations: opts.automations,
     factory: opts.factory,
     selfUpdate: opts.selfUpdate,

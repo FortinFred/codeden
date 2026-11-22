@@ -22,6 +22,12 @@ import { ProjectCheck } from "./project-config";
  *   Another repository restarts the issue and PR sync from scratch.
  * - `github_remote_missing`: a GitHub project's folder has no GitHub `origin` any more. The
  *   project keeps its coordinates and carries a `remoteWarning`; nothing is downgraded.
+ * - `forge_connected`: a local project gained an `origin` its configured Forgejo connection
+ *   matches and is now a `forge` project, or a forge project's missing remote is back.
+ * - `forge_changed`: a forge project's remote moved (another repository on the same forge set up
+ *   in CodeDen, or another URL); its coordinates follow it.
+ * - `forge_remote_missing`: a forge project's folder no longer has a matching `origin`, or it now
+ *   points at another forge. The project keeps its coordinates and warns; never downgraded.
  * - `folder_missing`: the project folder is gone or unreadable; nothing was changed.
  */
 export const ProjectRefreshOutcome = z.enum([
@@ -31,6 +37,9 @@ export const ProjectRefreshOutcome = z.enum([
   "github_connected",
   "github_changed",
   "github_remote_missing",
+  "forge_connected",
+  "forge_changed",
+  "forge_remote_missing",
   "folder_missing",
 ]);
 export type ProjectRefreshOutcome = z.infer<typeof ProjectRefreshOutcome>;
