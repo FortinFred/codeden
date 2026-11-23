@@ -349,10 +349,11 @@ export class FactoryService {
   }
 
   /**
-   * Change the autonomy mode. The software and dark factory need a GitHub project, a vision
-   * file and limits with a daily budget (in the request, or saved while already in a factory
-   * mode); a request without them throws at once. The tuning in the request is merged into the
-   * saved one after the ticks already queued, so a tick in flight never overwrites it.
+   * Change the autonomy mode. The software and dark factory need a project on a supported
+   * forge, a vision file and limits with a daily budget (in the request, or saved while already
+   * in a factory mode); a request without them throws at once. The tuning in the request is
+   * merged into the saved one after the ticks already queued, so a tick in flight never
+   * overwrites it.
    */
   setMode(projectId: string, req: SetAutonomyModeRequest): Promise<SetAutonomyModeResponse> {
     const project = this.deps.projects.get(projectId);

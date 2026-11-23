@@ -8,8 +8,9 @@ import { readVision } from "./vision";
 /** Switching modes and the kill switch (§10.1). */
 
 /**
- * The software and dark factory need a GitHub project, a vision file and limits with a daily
- * budget (sent with the switch, or saved while already in a factory mode).
+ * The software and dark factory need a project on a supported forge (GitHub, or a connected
+ * Forgejo), a vision file and limits with a daily budget (sent with the switch, or saved while
+ * already in a factory mode).
  */
 export function assertCanEnter(
   ctx: FactoryContext,
