@@ -586,8 +586,9 @@ is not treated as newly opened, so a silent baseline cannot trigger intake by ac
   they were at that commit. New issues created later are not in an existing worktree, just like
   new code.
 - **An agent editing an issue file** is editing an ordinary file in its branch. The change does
-  nothing until the PR merges. It appears in the PR's diff and is reviewed like any other file.
-  Role prompts tell sessions not to edit issues as part of their work. The factory's existing
+  nothing until the PR merges. It appears in the PR's diff and is reviewed like any other file,
+  and the issue tab reports "changed in PR #N" from the PR's file list before it lands. Role
+  prompts tell sessions not to edit issues as part of their work. The factory's existing
   rule that `.codeden/**` is an always-protected area already means a factory PR that changes
   `.codeden/issues/**` is escalated to a person, never auto-merged. The configured issue folder is
   protected the same way even when it is overridden outside `.codeden`, so a custom path cannot
@@ -840,8 +841,12 @@ Folder issues enter the existing factory with no second loop:
   `factory:hold` are too; the factory's label writes become file commits, and its hold/release
   tools work unchanged.
 - **Priority and overlap.** The item's title, summary and acceptance criteria still come from the
-  issue body; overlap estimation and queue ordering are unchanged. Malformed or duplicate files
-  are skipped by intake and never spend a model call.
+  issue body; overlap estimation and queue ordering are unchanged. A file issue has no separate
+  priority field: a person's issue carries no priority (so it ranks ahead of the scout's, as on
+  GitHub), and the scout's own filed item keeps the priority it reports, with the same value in
+  the file's body text. Labels and body wording remain available to the classifier as they are
+  for a forge issue. Malformed or duplicate files are skipped by intake and never spend a model
+  call.
 - **Comments.** Classification announcements, specs and factory comments are appended to the file
   by the same writer, with `author: codeden` and the existing hidden marker so automations do not
   treat CodeDen's own comment as a person's. Long factory text is trimmed to the comment limit and
