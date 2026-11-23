@@ -571,7 +571,9 @@ state).
   nothing until the PR merges. It appears in the PR's diff and is reviewed like any other file.
   Role prompts tell sessions not to edit issues as part of their work. The factory's existing
   rule that `.codeden/**` is an always-protected area already means a factory PR that changes
-  `.codeden/issues/**` is escalated to a person, never auto-merged.
+  `.codeden/issues/**` is escalated to a person, never auto-merged. The configured issue folder is
+  protected the same way even when it is overridden outside `.codeden`, so a custom path cannot
+  make issue edits auto-mergeable.
 - **A merged edit** is applied by the next scan, producing the events above. That is the intended
   approval path: a merged change is a person's review.
 - **A merged deletion** closes the issue in the projection with `stateReason: "not_planned"` and
@@ -855,9 +857,9 @@ The existing issues tab is kept; it learns where its rows come from.
   actions are enabled when the folder is writable and disabled with the reason when the token or
   checkout is read-only.
 - **Detail.** A folder issue shows its path, its front matter state and a **View file** action.
-  Comments are rendered from the appendix and are read-only in CodeDen; editing happens through
-  the issue editor or the file. A missing file is marked **Removed from the source**; the row stays
-  for history.
+  Comments are rendered from the appendix; an individual comment is never edited, but the
+  composer appends a new one. Title, body and state are edited through the issue editor or the
+  file. A missing file is marked **Removed from the source**; the row stays for history.
 - **Problems.** A banner lists malformed files and duplicate numbers with the path, the field and
   the reason, and a **Copy path** action. It never blocks the list. A **Refresh** action reruns the
   scan. A stale scan says "Showing the last successful scan; the folder could not be read".
