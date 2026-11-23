@@ -241,6 +241,40 @@ function reviewState(state: string): ForgeReview["state"] {
   }
 }
 
+/**
+ * Forgejo has no `reviewDecision`, so it is computed (`docs/forges.md` §5.6): an official,
+ * non-dismissed, non-stale `REQUEST_CHANGES` wins; otherwise official approvals are counted
+ * against branch protection's `required_approvals`. When the requirement cannot be read
+ * (`null`), a PR with official reviews reads `review_required` rather than `approved`: the merge
+ * gate must never pass on a rule CodeDen could not read. A review counts for its author's latest
+ * state, so a later comment does not undo an approval.
+ */
+export function reviewDecisionFor(
+  reviews: ForgeReview[],
+  requiredApprovals: number | null,
+): ReviewDecision {
+  const counted = reviews.filter(
+    (review) =>
+      review.official === true &&
+      review.stale !== true &&
+      review.state !== "dismissed" &&
+      review.state !== "pending",
+  );
+  // Only a verdict changes a reviewer's stance; a later comment keeps it, and a later approval
+  // replaces an earlier request for changes by the same author.
+  const latest = new Map<string, ForgeReview>();
+  for (const review of counted) {
+    if (review.state !== "approved" && review.state !== "changes_requested") continue;
+    latest.set((review.author ?? "").toLowerCase(), review);
+  }
+  const verdicts = [...latest.values()];
+  if (verdicts.some((review) => review.state === "changes_requested")) return "changes_requested";
+  const approvals = verdicts.filter((review) => review.state === "approved").length;
+  if (requiredApprovals === null) return counted.length === 0 ? "none" : "review_required";
+  if (requiredApprovals === 0) return approvals > 0 ? "approved" : "none";
+  return approvals >= requiredApprovals ? "approved" : "review_required";
+}
+
 // The git, checks and permission mappers live in `map-git.ts`; re-exported here so callers that
 // know one mapping module do not have to know how it is split.
 export {

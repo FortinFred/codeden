@@ -1,5 +1,7 @@
 import type {
   EventOf,
+  ForgeEventType,
+  ForgeRepo,
   GitHubRepo,
   GithubEventType,
   GithubIssue,
@@ -9,16 +11,20 @@ import type {
 import { eq } from "drizzle-orm";
 import { githubIssues, githubPrs, githubSyncState } from "../../db/schema";
 import type { Tx } from "../../events/projection-db";
-import { sameGithubRepo } from "../projects/reconcile";
+import { sameForgeRepo, sameGithubRepo } from "../projects/reconcile";
 import { issueToRow, prToRow } from "./rows";
 
-/** A persisted GitHub domain event. */
-export type GithubEvent = EventOf<GithubEventType>;
+/** A persisted event of the shared issue/PR projections (`github.synced`, `forge.synced`, …). */
+export type GithubEvent = EventOf<GithubEventType | ForgeEventType>;
 
-/** True for the GitHub domain events (`github.synced`, `issue.*`, `pr.*`, `review.*`). */
+/**
+ * True for the events projected into `github_issues` / `github_prs`: the GitHub and forge first
+ * imports, and the provider-neutral `issue.*`, `pr.*` and `review.*` events either sync emits.
+ */
 export function isGithubEvent(e: { type: string }): e is GithubEvent {
   return (
     e.type === "github.synced" ||
+    e.type === "forge.synced" ||
     e.type.startsWith("issue.") ||
     e.type.startsWith("pr.") ||
     e.type === "review.submitted"
@@ -54,6 +60,19 @@ export function githubRepoChanged(
 }
 
 /**
+ * True when a `project.updated` points an existing forge project at another repository on its
+ * forge, or makes a local project a forge one. `before` is the stored row (`forge` null when the
+ * project was not a forge project).
+ */
+export function forgeRepoChanged(
+  before: { forge: ForgeRepo | null } | undefined,
+  next: Project,
+): boolean {
+  if (!before || next.kind !== "forge") return false;
+  return !before.forge || !sameForgeRepo(before.forge, next.forge);
+}
+
+/**
  * Forget a project's synced issues and PRs and its sync cursors, so the next sync imports its
  * (new) repository from scratch, silently. Called inside the `project.updated` append when
  * `githubRepoChanged`, so a replay of the log does the same.
@@ -65,12 +84,15 @@ export function resetGithubProjection(tx: Tx, projectId: string): void {
 }
 
 /**
- * Project a GitHub domain event into `github_issues` / `github_prs`, inside the append
+ * Project a shared issue/PR event into `github_issues` / `github_prs`, inside the append
  * transaction. Every event carries the full row, so replaying the log rebuilds both tables.
+ * `forge.synced` writes the same rows as `github.synced` (the `github_` names are storage, not a
+ * provider claim).
  */
 export function applyGithubProjection(tx: Tx, e: GithubEvent): void {
   switch (e.type) {
     case "github.synced":
+    case "forge.synced":
       for (const issue of e.payload.issues) upsertIssue(tx, issue, e.ts);
       for (const pr of e.payload.prs) upsertPr(tx, pr, e.ts);
       return;

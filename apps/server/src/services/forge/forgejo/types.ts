@@ -132,6 +132,12 @@ export interface ForgejoCombinedStatus {
 export interface ForgejoBranch {
   name: string;
   commit: { id: string };
+  /** Whether branch protection applies; some releases omit it. */
+  protected?: boolean;
+  /** Approvals branch protection requires; `0` when nothing is required. */
+  required_approvals?: number;
+  /** Some releases nest the protection rules here instead. */
+  protection?: { required_approvals?: number } | null;
 }
 
 export interface ForgejoCompare {

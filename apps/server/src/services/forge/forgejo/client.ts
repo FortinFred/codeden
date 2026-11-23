@@ -37,8 +37,10 @@ import {
   comment,
   comments,
   createIssue,
+  type ForgejoIssueListQuery,
   getIssue,
   issueDetails,
+  listIssueRows,
   listIssues,
   removeLabels,
   replaceLabels,
@@ -52,6 +54,7 @@ import {
   listPulls,
   listReviews,
   mergePull,
+  prSnapshot,
   pullCommits,
   pullDiff,
   pullFiles,
@@ -59,7 +62,7 @@ import {
   updateBranch,
   updatePull,
 } from "./pulls";
-import type { ForgejoLabel } from "./types";
+import type { ForgejoIssue, ForgejoLabel } from "./types";
 
 /** What a Forgejo adapter will advertise once it implements the port (`docs/forges.md` §4.1). */
 export const FORGEJO_CAPABILITIES = {
@@ -113,6 +116,7 @@ export class ForgejoClient {
       repo: options.repo,
       log: options.log,
       mergeableReads: new Map(),
+      requiredApprovals: new Map(),
     };
   }
 
@@ -148,6 +152,14 @@ export class ForgejoClient {
   /** List issues (pull requests excluded), across pages. */
   listIssues(query?: ForgeIssueQuery): Promise<ForgeIssue[]> {
     return listIssues(this.context, query);
+  }
+
+  /**
+   * Raw issue rows (pull request rows included), for the sync's baseline and cursor: a row with
+   * `pull_request` is a PR number to refresh, the rest are issues.
+   */
+  listIssueRows(query: ForgejoIssueListQuery): Promise<ForgejoIssue[]> {
+    return listIssueRows(this.context, query);
   }
 
   /** One issue by its repository index. */
@@ -218,6 +230,14 @@ export class ForgejoClient {
   /** A PR's live details, including its files without patches. */
   getPull(number: number): Promise<ForgePrDetails> {
     return getPull(this.context, number);
+  }
+
+  /**
+   * A PR's fresh projection row: checks, reviews, computed review decision, commits and the
+   * settled mergeable state. What the sync refreshes and `/api/prs/:id` reads.
+   */
+  prSnapshot(number: number): Promise<ForgePr> {
+    return prSnapshot(this.context, number);
   }
 
   /** A PR's changed files, without patches. */

@@ -42,6 +42,54 @@ export async function branchHead(context: ForgejoContext, branch: string): Promi
   return data.commit.id;
 }
 
+/** How long a branch's required approvals are reused before asking again. */
+const REQUIRED_APPROVALS_TTL_MS = 60_000;
+
+/**
+ * The approvals branch protection requires on `branch` (`docs/forges.md` §5.6), `0` when the
+ * branch is unprotected, and `null` when the forge could not say (permission, a missing branch):
+ * a caller must not read `null` as "none required". Cached briefly per branch.
+ */
+export async function requiredApprovals(
+  context: ForgejoContext,
+  branch: string,
+): Promise<number | null> {
+  const cached = context.requiredApprovals.get(branch);
+  if (cached && Date.now() - cached.at < REQUIRED_APPROVALS_TTL_MS) return cached.value;
+  let value: number | null;
+  try {
+    const { data } = await context.http.get<ForgejoBranch>(
+      `${repoPath(context)}/branches/${seg(branch)}`,
+    );
+    value = requiredApprovalsOf(data);
+  } catch (error) {
+    // The review decision is best effort: an unreadable rule fails closed, not the PR.
+    if (
+      !(
+        error instanceof ForgeError &&
+        (error.forgeCode === "forge_forbidden" ||
+          error.forgeCode === "forge_not_found" ||
+          error.forgeCode === "forge_not_allowed")
+      )
+    ) {
+      throw error;
+    }
+    value = null;
+  }
+  context.requiredApprovals.set(branch, { value, at: Date.now() });
+  return value;
+}
+
+function requiredApprovalsOf(branch: ForgejoBranch | null): number | null {
+  if (!branch) return null;
+  if (typeof branch.required_approvals === "number") {
+    return Math.max(0, branch.required_approvals);
+  }
+  const nested = branch.protection?.required_approvals;
+  if (typeof nested === "number") return Math.max(0, nested);
+  return branch.protected === false ? 0 : null;
+}
+
 /** Forgejo's commit list has no `until` filter, so the head at a past time is unknown. */
 export function branchHeadAt(_branch: string, _at: string): Promise<string | null> {
   return Promise.resolve(null);

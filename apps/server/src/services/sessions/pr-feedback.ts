@@ -1,6 +1,7 @@
 import type {
   GithubPr,
   GithubReview,
+  ProjectKind,
   RawEventEnvelope,
   Session,
   SessionStatus,
@@ -138,6 +139,12 @@ export interface PrFeedbackDeps {
   send: (sessionId: string, input: UserInput) => Promise<unknown>;
   /** The project's trusted authors, whose reviews count without write access. Default: none. */
   trustedAuthors?: TrustedAuthors;
+  /**
+   * A project's kind, for the phases where feedback is GitHub-only: a Forgejo PR's notices
+   * arrive with the forge's write phase (`docs/forges.md` §4.5), so its events are skipped
+   * rather than passed on with GitHub instructions. Absent: every PR is treated as GitHub's.
+   */
+  projectKind?: (projectId: string) => ProjectKind | null;
   log?: (message: string) => void;
 }
 
@@ -176,6 +183,7 @@ export class PrFeedbackService {
     for (const event of events) {
       if (!PR_EVENTS.has(event.type)) continue;
       const { pr } = event.payload as { pr: GithubPr };
+      if (this.deps.projectKind?.(pr.projectId) === "forge") continue;
       const feedback = prFeedbackFor(event, this.deps.trustedAuthors?.(pr.projectId));
       if (feedback.length === 0) continue;
       const found = pr.sessionId ? this.deps.repo.find(pr.sessionId) : undefined;

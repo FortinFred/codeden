@@ -39,7 +39,8 @@ beforeEach(async () => {
     secrets: "memory",
     checkSetupOnStart: false,
     userHome: join(home, "user"),
-    forgejo: { client },
+    // The connection routes are under test; the project sync would need a real Forgejo.
+    forgejo: { client, sync: false },
   });
 });
 

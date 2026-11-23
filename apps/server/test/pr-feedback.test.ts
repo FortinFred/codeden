@@ -218,6 +218,25 @@ describe("PR feedback for sessions the user started", () => {
     expect(sent).toHaveLength(0);
   });
 
+  it("skips a forge project until the forge's write phase", async () => {
+    service.stop();
+    service = new PrFeedbackService({
+      store: env.store,
+      repo: env.repo,
+      settings: () => settings,
+      send: async (sessionId, input) => {
+        sent.push({ sessionId, input });
+      },
+      trustedAuthors: () => [],
+      projectKind: () => "forge",
+    });
+    service.start();
+    await userSessionWithPr();
+    failChecks("sha-2");
+    await sync();
+    expect(sent).toHaveLength(0);
+  });
+
   it("only goes to an open agent session", () => {
     const user = {
       ...sampleSession,

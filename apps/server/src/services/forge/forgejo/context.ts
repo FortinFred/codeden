@@ -22,6 +22,8 @@ export interface ForgejoContext {
   log?: (message: string) => void;
   /** The previous read of each open PR's head and mergeability. */
   mergeableReads: Map<number, PreviousMergeable>;
+  /** Branch protection's required approvals, cached briefly so a PR refresh does not re-ask. */
+  requiredApprovals: Map<string, { value: number | null; at: number }>;
 }
 
 /** `repos/{owner}/{repo}` with each segment encoded. */
