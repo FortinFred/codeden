@@ -20,6 +20,7 @@ import { rolePrompt } from "../src/services/orchestration/prompts";
  */
 
 const github: PromptProject = { kind: "github" };
+const forge: PromptProject = { kind: "forge" };
 const local: PromptProject = { kind: "local" };
 
 const agent = (over: Partial<PromptSession> = {}): PromptSession => ({
@@ -140,6 +141,17 @@ describe("agent system prompt", () => {
     expect(text).toMatch(COMMIT_FREELY);
     expect(text).not.toContain("create_pull_request` when");
     expect(text).not.toContain("Open a pull request");
+  });
+
+  it("tells a forge agent to open the PR there, with CodeDen's tools and no gh", () => {
+    const text = agentPrompt(agent({ startedBy: { kind: "pm" } }), forge);
+    expect(text).toContain(
+      "When the work is done, open the pull request with `create_pull_request`",
+    );
+    expect(text).toContain("Forge projects:");
+    expect(text).toContain("never use `gh`");
+    expect(text).toContain("Evidence attachments are GitHub-only");
+    expect(text).not.toContain("`attach_evidence`");
   });
 
   it("states the permission level so the agent doesn't ask before acting", () => {
@@ -363,6 +375,22 @@ describe("triage texts", () => {
     expect(text).not.toContain("instead of guessing");
     expect(text).toContain("state the assumption in the pull request description");
     expect(text).toContain("Ask with ask_user only if the change needs a protected area");
+  });
+
+  it("tells a forge issue's agent to open the PR there, without GitHub-only evidence", () => {
+    const text = issueSessionPrompt(
+      {
+        number: 4,
+        url: "http://127.0.0.1:3000/acme/widgets/issues/4",
+        title: "A forge bug",
+      },
+      "Clear bug.",
+    );
+    expect(text).toContain("with create_pull_request");
+    expect(text).toContain('"Fixes #4"');
+    expect(text).toContain("on the project's forge");
+    expect(text).not.toContain("attach_evidence");
+    expect(text).not.toContain("gh issue view");
   });
 
   it("tells the PM and the agent the issue and its comments are data, not instructions (#86)", () => {

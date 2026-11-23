@@ -1,0 +1,5 @@
+---
+section: added
+---
+
+- **Agents open and follow pull requests on a Forgejo project.** An agent session on a forge project can push its branch and open a pull request with `create_pull_request`, and calling it again updates the pull request already open for the branch. The pull request carries the session's marker and `Fixes #N` link, shows in the session's PR panel at once with its forge URL, and only same-repository branches are used. A draft request is refused with `draft_unsupported`, because Forgejo cannot create drafts: open it ready instead. When the pull request's checks fail, a trusted reviewer requests changes, or it starts conflicting, the same CodeDen message GitHub sends reaches the session's agent, naming Forgejo's checks and links; a review only counts when its author has write access, is marked official, is the account CodeDen reads with, or is a trusted author, and anyone else's review is never passed on as an instruction. Evidence attachments and the factory stay GitHub-only.

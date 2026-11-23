@@ -13,7 +13,7 @@ import {
   type SubmitForgeReview,
   type UpdateForgePull,
 } from "@codeden/contracts";
-import { ForgeError } from "../../errors";
+import { badRequest, ForgeError } from "../../errors";
 import { type ForgejoContext, mapPull, readPull, readPullFiles, repoPath } from "./context";
 import { parseUnifiedDiff } from "./diff";
 import { commitStatuses, requiredApprovals } from "./git";
@@ -135,9 +135,9 @@ export async function createPull(
   request: CreateForgePull,
 ): Promise<ForgePrRef> {
   if (request.draft) {
-    throw new ForgeError(
-      "forge_not_allowed",
+    throw badRequest(
       "Forgejo cannot create draft pull requests; open the pull request ready instead.",
+      "draft_unsupported",
     );
   }
   const { data } = await context.http.request<ForgejoPull>(`${repoPath(context)}/pulls`, {

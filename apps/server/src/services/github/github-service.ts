@@ -77,11 +77,11 @@ export interface GithubServiceDeps extends RunnerDeps {
 
 /**
  * GitHub for CodeDen (§9): connection state, issue and PR sync, and the operations agents, PMs
- * and the UI share. The shared paths (issue and PR lists, one issue, one PR, a session's PR, and
- * the issue writes: create, comment, label, triage) answer for a `kind: "forge"` project through
- * `ForgeService` (`docs/forges.md` phases A2 and B1), so the existing
- * `/api/projects/:id/github/*` routes and MCP tools serve both with one behaviour. PR, merge,
- * evidence and vision writes still refuse a forge project (phase B2). Every method that needs
+ * and the UI share. The shared paths (issue and PR lists, one issue, one PR, a session's PR, the
+ * issue writes: create, comment, label, triage, and opening a session's PR) answer for a
+ * `kind: "forge"` project through `ForgeService` (`docs/forges.md` phases A2, B1 and B2), so the
+ * existing `/api/projects/:id/github/*` routes and MCP tools serve both with one behaviour.
+ * Merge, evidence and vision writes still refuse a forge project (their phases). Every method that needs
  * GitHub takes a project id and fails with `409 not_a_github_project` for local-only and forge
  * projects, and `409 github_not_connected` without a token; list reads never fail for those
  * reasons (they return the projection and the state).
@@ -352,6 +352,12 @@ export class GithubService {
         "This session has read-only permissions: it cannot commit, push or open a pull request",
         "read_only",
       );
+    }
+    const forge = this.forgeFor(session.projectId);
+    if (forge) {
+      const result = await forge.createPullRequest(sessionId, input);
+      if (session.projectId) this.sync.soon(session.projectId);
+      return result;
     }
     const repo = this.githubRepo(session.projectId);
     const result = await createPullRequest(this.prDeps(), session, repo, input);

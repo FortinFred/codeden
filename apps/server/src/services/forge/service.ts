@@ -11,8 +11,10 @@ import {
   GithubPrDetails,
   type GithubPrDiff,
   type GithubPrsResponse,
+  type GithubReview,
   type GithubSyncStatus,
   type Project,
+  type Session,
   type Settings,
   type TriageIssueRequest,
   type TriageIssueResult,
@@ -20,20 +22,27 @@ import {
 import type { EventStore } from "../../events/store";
 import { conflict, ForgeError } from "../errors";
 import { withoutMarker } from "../github/issues";
+import type { CreatePullRequestInput, CreatePullRequestResult } from "../github/pull-requests";
 import type { GithubStore, IssueStateFilter } from "../github/store";
 import type { ProjectService } from "../projects/project-service";
+import type { RunnerDeps } from "../runner-port";
 import type { SecretStore } from "../secrets";
+import type { SessionRepo } from "../sessions/repo";
 import { FORGEJO_TOKEN_KEY, type ForgejoConnection } from "./connection";
 import { ForgejoClient } from "./forgejo/client";
 import { ForgejoSync, type ForgeProject } from "./forgejo/sync";
 import * as issues from "./issues";
+import * as pulls from "./pulls";
+import { isTrustedForgeReview } from "./review-trust";
 
-export interface ForgeServiceDeps {
+export interface ForgeServiceDeps extends RunnerDeps {
   /** Domain events, for the sync's appends. */
   store: EventStore;
   /** The shared issue/PR projections (`github_issues`, `github_prs`, `github_sync_state`). */
   data: GithubStore;
   projects: ProjectService;
+  /** Sessions, for the PR writes' branch push and link. */
+  repo: SessionRepo;
   /** Current settings, read on every call so a saved connection applies at once. */
   settings: () => Pick<Settings, "forges">;
   secrets: SecretStore;
@@ -56,7 +65,8 @@ export interface ForgeServiceDeps {
  * configured forge project and writes the same `forge.synced`, `issue.*`, `pr.*` and
  * `review.submitted` events as GitHub, so the existing projections, session PR links and read
  * responses need no provider branch. Issue writes (create, comment, label, triage) go through the
- * client and are projected at once; PR and evidence writes stay GitHub-only until phase B2.
+ * client and are projected at once, as are pull request writes (phase B2: push a session's branch,
+ * open or update its PR). Evidence and merge writes stay GitHub-only until their phase.
  */
 export class ForgeService {
   readonly sync: ForgejoSync;
@@ -233,6 +243,63 @@ export class ForgeService {
   /** A PR's diff at its current head, read from the forge (`GET /pulls/{index}.diff`). */
   getPrDiff(projectId: string, number: number): Promise<GithubPrDiff> {
     return this.clientForProject(projectId).pullDiff(number);
+  }
+
+  /**
+   * `create_pull_request` on a forge project: push the session's branch and open or update its
+   * PR. A draft request is refused before anything is pushed (`draft_unsupported`), and the PR
+   * is projected and linked to the session at once.
+   */
+  async createPullRequest(
+    sessionId: string,
+    input: CreatePullRequestInput,
+  ): Promise<CreatePullRequestResult> {
+    const session: Session = this.deps.repo.get(sessionId);
+    if (!session.projectId) throw conflict("This session has no project", "no_project");
+    const project = this.forgeProject(session.projectId);
+    const result = await pulls.createPullRequest(
+      {
+        client: this.clientForProject(project.id),
+        data: this.deps.data,
+        events: this.deps.store,
+        repo: this.deps.repo,
+        runner: this.deps.runner,
+        runners: this.deps.runners,
+      },
+      session,
+      project,
+      input,
+    );
+    this.soon(project.id);
+    return result;
+  }
+
+  /**
+   * Whether a review may steer the PR's session (`docs/forges.md` §6.2): live write permission,
+   * then the review's `official` flag, then the viewer or a trusted author. A permission lookup
+   * that cannot answer trusts nobody by itself.
+   */
+  async reviewIsTrusted(
+    projectId: string,
+    review: Pick<GithubReview, "author" | "official">,
+    viewer: string | null,
+  ): Promise<boolean> {
+    const project = this.forgeProject(projectId);
+    const login = review.author;
+    const permission = login
+      ? await this.clientForProject(projectId)
+          .permission(login)
+          .catch((error: unknown) => {
+            this.deps.log?.(`forge: permission lookup for ${login}: ${String(error)}`);
+            return "unknown" as const;
+          })
+      : "unknown";
+    return isTrustedForgeReview({
+      review,
+      permission,
+      viewer,
+      trustedAuthors: project.factoryLimits.trustedAuthors,
+    });
   }
 
   /** True when an open, unlinked PR's head branch is `branch` (a session just started on it). */

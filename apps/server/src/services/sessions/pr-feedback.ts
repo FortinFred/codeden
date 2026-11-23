@@ -78,10 +78,15 @@ export function receivesPrFeedback(session: Session): boolean {
  * are passed on only from a trusted reviewer (`isTrustedReviewEvent`: write access, the account
  * the review was read with, or one of the project's `trustedAuthors`): on a public repository
  * anyone can request changes, and an untrusted review is never an instruction to the agent.
+ *
+ * A forge project resolves trust asynchronously (`ForgeService.reviewIsTrusted`) and passes it
+ * as `reviewTrusted`; its instructions then name the forge instead of `gh`, which a forge
+ * project's agent does not use (`docs/forges.md` §4.5).
  */
 export function prFeedbackFor(
   event: RawEventEnvelope,
   trustedAuthors: readonly string[] = [],
+  options: { forge?: boolean; reviewTrusted?: boolean } = {},
 ): PrFeedback[] {
   if (!PR_EVENTS.has(event.type)) return [];
   const { pr, review, viewer } = event.payload as {
@@ -90,6 +95,7 @@ export function prFeedbackFor(
     viewer?: string | null;
   };
   if (pr.state !== "open" && pr.state !== "draft") return [];
+  const forge = options.forge === true;
   const head = pr.headSha ?? "unknown";
   const short = head.slice(0, 7);
   const out: PrFeedback[] = [];
@@ -97,28 +103,34 @@ export function prFeedbackFor(
     const failed = failingChecks(pr);
     const list = failed.length
       ? failed.map((c) => `- ${c.name} (${c.conclusion})${c.url ? `: ${c.url}` : ""}`).join("\n")
-      : "- (GitHub did not say which)";
+      : forge
+        ? "- (the forge did not say which)"
+        : "- (GitHub did not say which)";
     out.push({
       kind: "checks_failed",
       key: `checks_failed:${head}`,
       text: [
         `CI failed on your pull request #${pr.number} (commit ${short}). Failing checks:`,
         list,
-        "Read the failure logs (for GitHub Actions: `gh run view <run-id> --log-failed`), fix the cause, and push.",
+        forge
+          ? "Read the failure logs through the links above (or in the forge's web UI), fix the cause, and push."
+          : "Read the failure logs (for GitHub Actions: `gh run view <run-id> --log-failed`), fix the cause, and push.",
       ].join("\n"),
     });
   }
-  if (
-    event.type === "review.submitted" &&
-    review?.state === "changes_requested" &&
-    isTrustedReviewEvent({ review, viewer }, trustedAuthors)
-  ) {
+  const trusted =
+    options.reviewTrusted ??
+    isTrustedReviewEvent({ review: review ?? { author: null }, viewer }, trustedAuthors);
+  if (event.type === "review.submitted" && review?.state === "changes_requested" && trusted) {
     const who = review.author ? `@${review.author}` : "A reviewer";
     const body = review.body.trim() ? `\n\n${clip(review.body.trim())}` : "";
+    const read = forge
+      ? `Read the review and its comments on the pull request${review.url ? ` (${review.url})` : ""}, address them, and push.`
+      : `Read the review and its comments (\`gh pr view ${pr.number} --comments\`), address them, and push.`;
     out.push({
       kind: "changes_requested",
       key: `changes_requested:${head}`,
-      text: `${who} requested changes on your pull request #${pr.number}.${body}\n\nRead the review and its comments (\`gh pr view ${pr.number} --comments\`), address them, and push. ${PR_COMMENTS_ARE_INPUT}`,
+      text: `${who} requested changes on your pull request #${pr.number}.${body}\n\n${read} ${PR_COMMENTS_ARE_INPUT}`,
     });
   }
   if (pr.mergeable === "conflicting") {
@@ -139,12 +151,18 @@ export interface PrFeedbackDeps {
   send: (sessionId: string, input: UserInput) => Promise<unknown>;
   /** The project's trusted authors, whose reviews count without write access. Default: none. */
   trustedAuthors?: TrustedAuthors;
-  /**
-   * A project's kind, for the phases where feedback is GitHub-only: a Forgejo PR's notices
-   * arrive with the forge's write phase (`docs/forges.md` §4.5), so its events are skipped
-   * rather than passed on with GitHub instructions. Absent: every PR is treated as GitHub's.
-   */
+  /** A project's kind: a forge project's review trust is resolved through its forge. */
   projectKind?: (projectId: string) => ProjectKind | null;
+  /**
+   * Whether a forge project's review may steer the agent (`docs/forges.md` §6.2). Absent, or a
+   * lookup that fails, means untrusted: a forge PR's changes requested are never passed on
+   * without one of the forge's trust signals.
+   */
+  forgeReviewTrust?: (
+    projectId: string,
+    review: Pick<GithubReview, "author" | "official">,
+    viewer: string | null,
+  ) => Promise<boolean>;
   log?: (message: string) => void;
 }
 
@@ -152,10 +170,11 @@ export interface PrFeedbackDeps {
  * PR feedback for sessions the user started (§9): when the pull request a session owns fails
  * its checks, gets a review requesting changes from someone with write access (or the account
  * CodeDen read it with, or a trusted author; see `review-trust.ts`) or runs into merge
- * conflicts, the session is sent a message
- * from CodeDen (queued behind a running turn) so the agent can fix it without the user
- * relaying it. Each problem is sent once per head commit, and at most
- * `PR_FEEDBACK_MAX_ROUNDS` messages go out per PR. Off with `sessions.prFeedback`.
+ * conflicts, the session is sent a message from CodeDen (queued behind a running turn) so the
+ * agent can fix it without the user relaying it. On a forge project the trust signals are the
+ * forge's own (live permission, `official`, the viewer, `trustedAuthors`). Each problem is sent
+ * once per head commit, and at most `PR_FEEDBACK_MAX_ROUNDS` messages go out per PR. Off with
+ * `sessions.prFeedback`.
  */
 export class PrFeedbackService {
   private unsubscribe: (() => void) | undefined;
@@ -182,9 +201,30 @@ export class PrFeedbackService {
     if (!this.deps.settings().sessions.prFeedback) return;
     for (const event of events) {
       if (!PR_EVENTS.has(event.type)) continue;
-      const { pr } = event.payload as { pr: GithubPr };
-      if (this.deps.projectKind?.(pr.projectId) === "forge") continue;
-      const feedback = prFeedbackFor(event, this.deps.trustedAuthors?.(pr.projectId));
+      const { pr, review, viewer } = event.payload as {
+        pr: GithubPr;
+        review?: GithubReview;
+        viewer?: string | null;
+      };
+      const forge = this.deps.projectKind?.(pr.projectId) === "forge";
+      let reviewTrusted: boolean | undefined;
+      if (forge && event.type === "review.submitted") {
+        reviewTrusted =
+          review && this.deps.forgeReviewTrust
+            ? await this.deps
+                .forgeReviewTrust(pr.projectId, review, viewer ?? null)
+                .catch((error: unknown) => {
+                  this.deps.log?.(
+                    `pr feedback: checking the reviewer of PR #${pr.number}: ${errorMessage(error)}`,
+                  );
+                  return false;
+                })
+            : false;
+      }
+      const feedback = prFeedbackFor(event, this.deps.trustedAuthors?.(pr.projectId), {
+        forge,
+        ...(reviewTrusted === undefined ? {} : { reviewTrusted }),
+      });
       if (feedback.length === 0) continue;
       const found = pr.sessionId ? this.deps.repo.find(pr.sessionId) : undefined;
       if (!found || !receivesPrFeedback(found.session)) continue;

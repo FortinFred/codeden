@@ -7,7 +7,7 @@ export const MCP_SERVER_NAME = "codeden";
 /** What the CodeDen system prompt depends on: who started the session and where it works. */
 export type PromptSession = Pick<Session, "role" | "startedBy" | "worktreePath" | "autonomy">;
 
-/** The session's project, when it has one: GitHub projects get the pull request flow. */
+/** The session's project, when it has one: GitHub and forge projects get the pull request flow. */
 export type PromptProject = Pick<Project, "kind"> | null;
 
 /**
@@ -17,7 +17,15 @@ export type PromptProject = Pick<Project, "kind"> | null;
 const USER_DECISIONS =
   "destructive or irreversible steps (deleting data or someone else's work, force-pushing, rewriting shared history), spending money or creating accounts or credentials, outward-facing actions your brief didn't ask for (publishing, releases, deploys, messages or comments to other people), protected areas, or a request with two readings that lead to substantially different work";
 
-const TOOLS = `## CodeDen tools
+const GITHUB_PROJECT_TOOLS =
+  "- GitHub projects: `create_pull_request` pushes your branch and opens the PR (linked to your issue and this session); `attach_evidence` posts screenshots, files and test output on it, or on any issue (`target`); `comment_on_issue` and `get_pr_status` (checks, reviews, mergeability). For anything else on GitHub (reading or editing issues, labels, checks, reviews) use the `gh` CLI, which is signed in as the user. GitHub has no API for uploading images, so `gh` can't attach screenshots: post them with `attach_evidence` (pass the `File:` path `browser_screenshot` prints, a file in your worktree, or an `artifactId`), and reuse the image URLs it returns if you also edit an issue or PR description with `gh`.";
+
+const FORGE_PROJECT_TOOLS =
+  "- Forge projects: `create_pull_request` pushes your branch and opens the pull request on the project's forge (linked to your issue and this session); `comment_on_issue` and `get_pr_status` (checks, reviews, mergeability) read and write the forge. Read issues and pull requests through these tools or the forge's web UI; never use `gh`, and never put the forge's access token in a command or a file. Evidence attachments are GitHub-only for now: describe screenshots and test output in the pull request instead.";
+
+/** The CodeDen tools section, worded for the project's forge. */
+function toolsSection(project: PromptProject): string {
+  return `## CodeDen tools
 
 CodeDen tools are on the \`${MCP_SERVER_NAME}\` MCP server:
 
@@ -26,10 +34,11 @@ CodeDen tools are on the \`${MCP_SERVER_NAME}\` MCP server:
 - \`share_to_chat\`: show the user a file or image instead of describing it.
 - Browser (\`browser_navigate\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_press\`, \`browser_mouse\`, \`browser_select\`, \`browser_upload\`, \`browser_dialog\`, \`browser_screenshot\`, \`browser_logs\`, \`browser_wait\`, \`browser_evaluate\`, \`browser_open_dev_server\`): the same browser the user watches. Use it to check UI work: open the dev server, read the page with \`browser_snapshot\`, act on element refs, check \`browser_logs\` for errors. Where there is no useful ref (canvas, map, drag handle, hover menu), click, hover, drag or scroll at screenshot coordinates with \`browser_mouse\`. Choose options of \`<select>\` menus with \`browser_select\` and upload files with \`browser_upload\`, not by clicking. A page's alert, confirm or prompt waits for an answer: give it with \`browser_dialog\`. Call \`browser_screenshot\` with \`share: true\` for screenshots that show your result.
 - \`generate_image\` (when listed): create images into your worktree, e.g. \`public/hero.png\`.
-- GitHub projects: \`create_pull_request\` pushes your branch and opens the PR (linked to your issue and this session); \`attach_evidence\` posts screenshots, files and test output on it, or on any issue (\`target\`); \`comment_on_issue\` and \`get_pr_status\` (checks, reviews, mergeability). For anything else on GitHub (reading or editing issues, labels, checks, reviews) use the \`gh\` CLI, which is signed in as the user. GitHub has no API for uploading images, so \`gh\` can't attach screenshots: post them with \`attach_evidence\` (pass the \`File:\` path \`browser_screenshot\` prints, a file in your worktree, or an \`artifactId\`), and reuse the image URLs it returns if you also edit an issue or PR description with \`gh\`.
+${project?.kind === "forge" ? FORGE_PROJECT_TOOLS : GITHUB_PROJECT_TOOLS}
 - If a CodeDen tool fails with "CodeDen server unreachable", CodeDen is restarting: wait a few seconds and call the same tool again.
 - \`finish\`: record the outcome and a short summary once your assigned task is done.
 - \`suggest_followups\`: 2 to 4 short next prompts the user might send, including optional next steps you would otherwise ask about. Call it as the last action of every turn.`;
+}
 
 /** Where the agent works: its own worktree, or a folder it shares with the user. */
 function workspaceLine(session: PromptSession): string {
@@ -67,7 +76,7 @@ function gitLines(session: PromptSession, project: PromptProject): string[] {
   const lines = [
     "- This worktree and its branch are yours: edit files, run the project's checks and commit as you go without asking, unless your brief says otherwise.",
   ];
-  if (project?.kind !== "github") return lines;
+  if (project?.kind !== "github" && project?.kind !== "forge") return lines;
   lines.push(
     session.startedBy.kind === "user"
       ? "- Open a pull request with `create_pull_request` when the user asks for one; otherwise offer it with `suggest_followups` instead of asking."
@@ -110,7 +119,7 @@ export function agentPrompt(session: PromptSession, project: PromptProject): str
     "",
     ...lines,
     "",
-    TOOLS,
+    toolsSection(project),
   ].join("\n");
 }
 
