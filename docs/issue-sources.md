@@ -175,6 +175,14 @@ stored independently. The settings remain the single source of truth.
   a factory mode is on also starts with a silent baseline, so files that already exist are old
   news, not newly opened work; they need the `codeden-factory` label or a person's decision. The
   UI says this before the switch.
+- **Switching is refused while work refers to the old source.** Sessions, factory items, inbox
+  notices and PR links store an issue number and URL, not the source. If the source or folder
+  changes, the same number means a different issue, and the factory's `closedIssueOf` or a
+  session's brief could read the wrong file. The update is therefore refused with
+  `409 issue_source_in_use` while any unfinished factory item, non-archived agent session, open PR
+  or pending merge-close refers to an issue from the old source. The user finishes or archives
+  that work first, then switches. Nothing is rewritten to point at the new source, and a forced
+  switch is not offered.
 - **No automatic switching.** Detection may change `kind` (a local project gains a GitHub remote,
   a GitHub project is disconnected) and that changes the PR flow, but never `issues.source`. A
   project that gains a forge remote while using folder issues keeps its backlog and gains PRs.
@@ -390,6 +398,7 @@ A malformed file never blocks the sync of the others and never deletes rows.
 | `duplicate_number` | Neither file is read; the last good row stays; the factory skips the number |
 | `bad_comment` | The issue reads, but it is flagged and skipped by the factory until fixed; comments after the bad entry are not trusted |
 | `too_large` (file over 1 MiB, front matter over 64 KiB, body over 65,000 characters) | Ignored and reported |
+| `not_a_regular_file` (a symlink, a submodule or a special entry in the folder) | Ignored and reported; git reads the blob as data, and a local write refuses to write through a symlink |
 | `unknown_field` | Warning only; the issue syncs and the field is preserved on writes |
 | `missing_state_reason` (a closed issue with `stateReason: null`) | Warning only; the issue syncs, but the factory does not treat it as completed and asks a person instead |
 | `too_many_files` (over 5,000 issue files or 32 MiB of them) | The scan stops at the cap and reports; issues beyond it are not read. A tracker this large is out of scope |
@@ -819,6 +828,9 @@ Folder issues enter the existing factory with no second loop:
   by the same writer, with `author: codeden` and the existing hidden marker so automations do not
   treat CodeDen's own comment as a person's. Long factory text is trimmed to the comment limit and
   the truncation is noted.
+- **Evidence.** Evidence is attached to the PR, never to a folder issue. For a folder source the
+  factory's evidence check reads the PR conversation only; there is no forge issue comment to read,
+  and the issue file itself never carries images or logs.
 - **Merge and close.** The PR is still a forge PR, so evidence, checks, review and the merge queue
   are unchanged. A merged PR closes the file (§7.2), and the factory's `closed-issues` logic sees
   `stateReason: completed` and the merged PR exactly as it does for GitHub. A close with
@@ -881,7 +893,7 @@ until their phase lands.
 | Phase | Slice | Acceptance criteria |
 |---|---|---|
 | **0** | Contracts + parser (the first PR) | `Project.issues` and the source helpers; `IssueSourceSettings`, `IssueSourceStatus`, `IssueFileProblem`; a strict front-matter/body/comments parser and renderer; number/ledger/slug helpers; tests for a round trip, ledger derivation, duplicate and missing numbers, malformed files, comments with heading-like lines, CRLF and unknown keys. No runtime, no migration, no UI |
-| **1** | Read-only sync + UI/PM reads | Project DB column and folder sync state; `IssueFolderSync` reading the default branch with fetch/fallback/stale handling; `issues.synced`, `diffIssue` reuse and projection; deletion closes; duplicate/malformed reports; `list_issues` and `get_issue` for folder projects; issues tab source label, problems and local-project state. No issue writes (create/triage/comment disabled with a reason) |
+| **1** | Read-only sync + UI/PM reads | Project DB column and folder sync state; `IssueFolderSync` reading the default branch with fetch/fallback/stale handling; `issues.synced`, `diffIssue` reuse and projection; deletion closes; duplicate/malformed reports; source/folder changes gated as §4.4; `list_issues` and `get_issue` for folder projects; issues tab source label, problems and local-project state. No issue writes (create/triage/comment disabled with a reason) |
 | **2a** | Writes: create and comment | Number allocation with CAS retries; create and comment on the default branch through GitHub, Forgejo and local; events/projection; New issue dialog; PM `create_issue`; comment drafts survive a failed write |
 | **2b** | Writes: label, triage, close, edit | One-commit triage with labels, comment and reason; label/hold tools; close/reopen; edit title/body/labels; UI triage and edit; read-only refusals; conflict and malformed handling |
 | **3** | Merge-close | `Fixes`/`Closes` plus the trailer; PR body rule for forge-issues-enabled repositories; `pr.merged` closes the file once; pending-close retry queue and inbox item; factory settle sees the reason; tests for idempotency, failure and source switch |
@@ -918,6 +930,7 @@ the issues tab); phase 2a is the first write.
 | **The reservation ledger's extra commit** | Two commits on create and a tiny metadata file in the folder. This is the price of safe numbering across clones; it is bounded (one extra commit per issue) and invisible to readers. If it becomes noise, a forge-side reservation is a later optimization |
 | **Windows and line endings** | UTF-8/LF canonical, CRLF accepted; commit only the issue path when the default branch is checked out, and use a temporary detached worktree when it is not; paths are repository-relative, not OS-absolute |
 | **Issue source and `kind` drift** | A folder source does not follow detection. Losing the forge remote makes a project local but keeps its files; gaining a forge keeps its files and adds PRs. Only a person changes the source |
+| **Switching source or folder with work in flight** | Refuse while an unfinished factory item, live agent session or open PR links an old-source issue, because numbers are reused by the other source (different issue, same `#N`). Finish or archive the work first; never rewrite stored refs or force the switch |
 | **Contract names** | Keep `github_issues`, `GithubService` and `github_*` error codes to avoid a mechanical rename with no user value ([forges.md](forges.md) §3). Add neutral aliases only where a payload is new |
 
 Open questions with a recommended default:
