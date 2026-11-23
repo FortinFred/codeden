@@ -270,7 +270,7 @@ while `state` is `closed`. `null` means unknown, never "completed".
 | `closedAt` | no | RFC 3339 string or `null` | Default `null`; written when CodeDen closes; a hand close without it is approximated from `updatedAt` |
 | `labels` | no | string array | Default `[]`; at most 20 labels, each 1 to 100 characters; duplicates removed; order preserved |
 | `author` | no | string or `null` | A forge login without `@`, `local` for a person whose login is unknown, `codeden` for CodeDen itself; displayed, never trusted by itself |
-| `createdAt` | no | RFC 3339 string | Default the first commit that added the file when that is cheap to read, else the baseline time |
+| `createdAt` | no | RFC 3339 string | Default the first commit that added the file when that is cheap to read, else `null` (never the baseline time, so a silent import is not mistaken for new work) |
 | `updatedAt` | no | RFC 3339 string | Default the file's last commit time; CodeDen writes it on every write |
 | `pullRequests` | no | positive integer array | Informational list of forge PR numbers; the forge remains authoritative; default `[]` |
 
@@ -318,6 +318,10 @@ The body ends with the machine-managed marker:
   `###` headings in the body.
 - A comment entry with no body, a bad timestamp or an unknown author form is `bad_comment`; the
   rest of the file still reads, but the issue is reported and the factory skips it until fixed.
+- An issue holds at most 200 comments and must stay within the 1 MiB file cap; each comment is at
+  most 20,000 characters in the projection. A write that would exceed either is refused with
+  `409 issue_comment_limit` and says to open a follow-up issue. The file cap, not the count, is
+  what a very chatty issue usually reaches first.
 
 Comments are in the file, not only in SQLite, because the tracker is the repository. A second
 copy that CodeDen alone can read would make the files a lie, and a comment posted by a person in a
@@ -329,8 +333,9 @@ whole file and adds a commit (§12).
 The number is identity. It appears in the filename and front matter, in `Fixes #N`, in session
 `workKey`s (`issue:N`), in factory items and in inbox ids.
 
-- **The reservation ledger.** The folder holds one metadata file, `.codeden/issues/.numbers`,
-  which is not an issue file and is ignored by the scan. It is a tiny JSON document:
+- **The reservation ledger.** The folder holds one metadata file, `<folder>/.numbers`
+  (`.codeden/issues/.numbers` by default), which is not an issue file and is ignored by the scan.
+  It is a tiny JSON document:
 
   ```json
   { "next": 42 }
@@ -457,9 +462,12 @@ The folder sync reads the **default branch's committed tree**, not the project c
 tree and not a session worktree.
 
 - For a `github` or `forge` project, the sync fetches `origin` (no tags, no checkout, no pull) with
-  a short timeout, with `GIT_TERMINAL_PROMPT=0`, and reads `refs/remotes/origin/<default>`.
-- For a local project, it reads `refs/heads/<default>` (or the checked-out branch when no default
-  is recorded).
+  a short timeout, with `GIT_TERMINAL_PROMPT=0`, and reads `refs/remotes/origin/<default>`. A
+  commit on the local default branch that has not been pushed is not part of the shared tracker
+  until it is; the UI can say the local branch is ahead, but the sync never silently switches to
+  the local branch.
+- For a local project, there is no remote: it reads `refs/heads/<default>` (or the checked-out
+  branch when no default is recorded), so a local commit is the source.
 - Files are read with `git ls-tree -r` and `git cat-file blob`, using the blob OID to skip files
   that did not change.
 - If the fetch fails, the scan uses the last fetched remote ref and reports `stale: true`; it does
@@ -546,7 +554,7 @@ After the baseline, the mapping is the existing one, produced by `diffIssue`:
 | Comment count went up | `issue.commented` | The new comments, oldest first, parsed from the appendix |
 | Comment count went down (a hand deletion, which CodeDen never does) | `issue.updated` | `changes: ["comments"]` |
 | File removed | `issue.updated` | Synthesized close: `state: closed`, `stateReason: not_planned`; reported as `issue_file_removed` |
-| File renamed, same number | none | Reported as `file_moved`; the row keeps its number |
+| File renamed, same number | `issue.updated` if the URL changed | `changes: ["url"]`; reported as `file_moved`; the row keeps its number |
 | Malformed or duplicate | none | Reported; last good row kept |
 | First scan | `issues.synced` | Silent; no notices or automations |
 
@@ -567,9 +575,10 @@ browser. A deleted file keeps its last URL; the UI marks it removed rather than 
 link works.
 
 `updatedAt` is the front matter value, else the file's last commit time. `createdAt` is the front
-matter value, else the first commit that added the file, else `baselineAt`. `closedAt` is the
-front matter value, else the first scan time at which `state: closed` was seen (stored in folder
-state).
+matter value, else the first commit that added the file, else `null`: a file with no creation time
+is not treated as newly opened, so a silent baseline cannot trigger intake by accident.
+`closedAt` is the front matter value, else the first scan time at which `state: closed` was seen
+(stored in folder state).
 
 ### 6.5 Edits, deletions and worktrees
 
@@ -644,8 +653,12 @@ event the factory and notices already use, checks the project's source and each 
    the close at once. The next scan sees the same state and emits nothing.
 3. If the write fails (branch protection, a moved head, an offline forge, a read-only token), keep
    a pending close in the folder state and retry on every sync tick with backoff. Report it in the
-   inbox (`issue_close_failed`) if it is still failing after the first retries. A merged PR is
-   never lost because the issue file could not be written.
+   inbox (`issue_close_failed`) if it is still failing after the first retries. The queue is
+   durable across restarts; CodeDen does not rebuild it from every merged PR with an open issue,
+   because a person may have reopened the issue on purpose. The job records the blob it last saw;
+   if the issue changed before the retry succeeds, the job is dropped and reported instead of
+   overwriting a person's edit. A merged PR is never lost because the issue file could not be
+   written.
 4. If the issue is already closed, or the file is gone, or the source changed since the PR was
    opened, do nothing and report the reason. Never reopen a closed issue on merge.
 
@@ -782,7 +795,12 @@ No new tools. The existing tools keep their names and inputs and dispatch on the
 | `create_issue` | Allocates, writes and commits the file |
 | `triage_issue` | One commit as in §8.4; returns the file URL as the comment URL |
 | `start_session` | Uses the issue ref (`url` is a blob or `file://` URL) exactly as today |
+| `comment_on_issue` | Appends to the folder issue's appendix; a PR conversation still comments on the forge. If the number matches both a folder issue and a forge PR, an explicit `target: "issue" \| "pr"` is required and the call is refused as `ambiguous_number` without it |
 | `attach_evidence` | Targets the PR (folder issues have no forge conversation); with no PR it fails and says evidence needs a pull request |
+
+The number collision is the one place where a single `#N` is ambiguous: issue numbers are per
+project and PR numbers are per forge, so both can be 42. Issue tools read the issue, PR tools read
+the PR, and only `comment_on_issue` needed a target to choose.
 
 `inIssueTrackingProject` becomes `inIssueProject`: true for a forge project, and for a folder
 source on any git-backed project, including local. At that point `list_issues`, `get_issue`,
@@ -920,7 +938,7 @@ the issues tab); phase 2a is the first write.
 | **Deleting a file** | Treat a committed deletion as a close (`not_planned`) and keep the row, rather than silently forgetting the issue or reusing its number. A missing folder is an error, not a mass deletion |
 | **Forge issues still enabled** | `Fixes #N` could close an unrelated forge issue. Use the hidden trailer and omit the bare keyword for CodeDen's own PRs; warn on hand-written ones; recommend disabling the forge tracker |
 | **Local project with folder issues** | Allowed for triage and sessions, refused for factory modes because there is no PR. A local project that gains a forge keeps the files and gains the factory |
-| **Default branch versus working tree** | Read the committed default branch only. Uncommitted edits are intentionally invisible; a lost uncommitted edit is a git problem, not a tracker change. The scan reports stale data instead of falling back |
+| **Default branch versus working tree** | Read the committed default branch only: `origin/<default>` for a forge project, the local branch for a local one. Uncommitted edits and unpushed local commits are intentionally invisible; a lost uncommitted edit is a git problem, not a tracker change. The scan reports stale data instead of falling back |
 | **Performance** | Blob OIDs skip unchanged files; a fetch per poll is the cost of seeing other people's commits. The 60 s/15 s intervals and the file caps bound it. A huge backlog is out of scope |
 | **Synthetic URLs and comment ids** | Blob URL when a forge exists, `file://` for a local project; comment ids are hashed from immutable entry data and anchors use the ordinal. Never fabricate a GitHub issue URL |
 | **Author spoofing** | `author` is display metadata, not trust. Trust comes from the default branch. A person can write any login in a file, and it changes nothing security-wise |
