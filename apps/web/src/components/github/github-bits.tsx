@@ -143,22 +143,28 @@ export function LabelChip({ name }: { name: string }) {
   );
 }
 
-/** "Not connected" / "local-only" placeholder for GitHub views. */
+/** "Not connected" / "local-only" placeholder for issue and PR views. */
 export function GithubUnavailable({
   connection,
   localOnly,
   className,
   action,
+  provider = "GitHub",
 }: {
   connection?: GithubConnection | null;
   localOnly?: boolean;
   className?: string;
   action?: ReactNode;
+  /** The forge the view reads, e.g. `Forgejo` (`docs/forges.md` phase A2). */
+  provider?: string;
 }) {
-  const title = localOnly ? "Local-only project" : "GitHub is not connected";
+  const title = localOnly ? "Local-only project" : `${provider} is not connected`;
   const body = localOnly
     ? "This project has no GitHub remote. Sessions, worktrees, diffs and automations work; issues, pull requests and evidence need a GitHub repository."
-    : (connection?.message ?? "Run `gh auth login` in a terminal, then refresh.");
+    : (connection?.message ??
+      (provider === "GitHub"
+        ? "Run `gh auth login` in a terminal, then refresh."
+        : "Check the connection in Settings, then refresh."));
   return (
     <div
       className={cn(

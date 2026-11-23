@@ -16,13 +16,30 @@ export function projectFor(services: AppServices, projectId: string): Project {
   return project;
 }
 
-/** A GitHub project, or a tool error for local-only projects (no issue/PR flow, §9). */
+/** A GitHub project, or a tool error for local-only and forge projects (GitHub writes, §9). */
 export function githubProject(services: AppServices, projectId: string): Project {
   const project = projectFor(services, projectId);
+  if (project.kind === "forge") {
+    throw new ToolError(
+      `${project.name} is a forge project; that GitHub action is not available yet.`,
+    );
+  }
   if (project.kind !== "github") {
     throw new ToolError(
       `${project.name} is a local project without a GitHub remote: no issues or PRs.`,
     );
+  }
+  return project;
+}
+
+/**
+ * A project with an issue and PR flow: GitHub, or a forge project whose issues and PRs sync
+ * read-only in phase A2 (`docs/forges.md` §9). Reads only; writes call `githubProject`.
+ */
+export function issueTrackingProject(services: AppServices, projectId: string): Project {
+  const project = projectFor(services, projectId);
+  if (project.kind !== "github" && project.kind !== "forge") {
+    throw new ToolError(`${project.name} has no forge remote: no issues or PRs.`);
   }
   return project;
 }

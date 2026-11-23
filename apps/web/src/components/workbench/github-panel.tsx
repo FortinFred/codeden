@@ -10,6 +10,7 @@ import { Markdown } from "@/components/thread/markdown";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useClient } from "@/lib/api";
+import { isReadOnlyForge, projectForgeName } from "@/lib/forge";
 import { platform } from "@/lib/platform";
 import { useProject, useSession } from "@/lib/queries";
 import { useSessionActions } from "@/lib/session-actions";
@@ -94,6 +95,8 @@ export function GitHubPanel({ sessionId }: { sessionId: string }) {
   const session = useSession(sessionId);
   const project = useProject(session?.projectId);
   const localOnly = project?.kind === "local";
+  const forge = project ? projectForgeName(project) : "GitHub";
+  const readOnly = isReadOnlyForge(project);
   const { data, isLoading, error } = useQuery({
     queryKey: ["github", "session", sessionId],
     queryFn: () => client.github.session(sessionId),
@@ -121,7 +124,7 @@ export function GitHubPanel({ sessionId }: { sessionId: string }) {
     );
   if (error) return <p className="p-4 text-xs text-status-failed">{error.message}</p>;
   if (data && !data.connection.connected)
-    return <GithubUnavailable connection={data.connection} className="m-4" />;
+    return <GithubUnavailable connection={data.connection} provider={forge} className="m-4" />;
   if (!data?.issue && !data?.pr) {
     return (
       <EmptyState
@@ -144,7 +147,9 @@ export function GitHubPanel({ sessionId }: { sessionId: string }) {
           ? "The agent was asked to open a pull request. The request is queued behind the running turn, and the PR appears here once it's open."
           : offer.requested === "sent"
             ? "The agent was asked to open a pull request. It appears here once it's open."
-            : "Sessions started from an issue link it here. When the work is ready, ask the agent to open a pull request and it appears here."}
+            : readOnly
+              ? `Sessions started from an issue link it here. Pull requests this session opens on ${forge} appear here once they sync.`
+              : "Sessions started from an issue link it here. When the work is ready, ask the agent to open a pull request and it appears here."}
       </EmptyState>
     );
   }
@@ -152,7 +157,12 @@ export function GitHubPanel({ sessionId }: { sessionId: string }) {
     <div className="h-full space-y-6 overflow-y-auto p-4 scroll-thin">
       {data.pr && (
         <Section title="Pull request">
-          <PrDetailsView prId={githubPrId(data.pr.projectId, data.pr.number)} showSession={false} />
+          <PrDetailsView
+            prId={githubPrId(data.pr.projectId, data.pr.number)}
+            showSession={false}
+            readOnly={readOnly}
+            provider={forge}
+          />
           {session && <ReviewPrButton session={session} />}
         </Section>
       )}

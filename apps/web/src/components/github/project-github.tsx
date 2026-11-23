@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Skeleton } from "@/components/ui/skeleton";
 import { useClient } from "@/lib/api";
 import type { GithubState } from "@/lib/api/feature-apis";
+import { isReadOnlyForge, projectForgeName } from "@/lib/forge";
 import { ago } from "@/lib/format";
 import { platform } from "@/lib/platform";
 import { cn } from "@/lib/utils";
@@ -101,22 +102,27 @@ function ListBox({ children, empty }: { children: React.ReactNode[]; empty: stri
   );
 }
 
-/** Project GitHub tab (§9): pull requests and issues with labels, status and checks. */
+/**
+ * Project issue and PR tab (§9): pull requests and issues with labels, status and checks, for a
+ * GitHub project or a forge project (`docs/forges.md` phase A2, read-only).
+ */
 export function ProjectGithub({ project }: { project: Project }) {
   const client = useClient();
   const queryClient = useQueryClient();
   const [state, setState] = useState<GithubState>("open");
   const [openPr, setOpenPr] = useState<GithubPr | null>(null);
-  const github = project.kind === "github";
+  const connectedProject = project.kind === "github" || project.kind === "forge";
+  const forge = projectForgeName(project);
+  const readOnly = isReadOnlyForge(project);
   const prs = useQuery({
     queryKey: ["github", "prs", project.id, state],
     queryFn: () => client.github.prs(project.id, state),
-    enabled: github,
+    enabled: connectedProject,
   });
   const issues = useQuery({
     queryKey: ["github", "issues", project.id, state],
     queryFn: () => client.github.issues(project.id, state),
-    enabled: github,
+    enabled: connectedProject,
   });
   const sync = useMutation({
     mutationFn: () => client.github.sync(project.id),
@@ -124,11 +130,13 @@ export function ProjectGithub({ project }: { project: Project }) {
     onError: (e) => toast.error("Sync failed", { description: e.message }),
   });
 
-  if (!github) {
+  if (!connectedProject) {
     return <GithubUnavailable localOnly action={<CheckRemoteButton projectId={project.id} />} />;
   }
   const connection = prs.data?.connection ?? issues.data?.connection;
-  if (connection && !connection.connected) return <GithubUnavailable connection={connection} />;
+  if (connection && !connection.connected) {
+    return <GithubUnavailable connection={connection} provider={forge} />;
+  }
   const syncStatus = prs.data?.sync;
 
   return (
@@ -157,6 +165,15 @@ export function ProjectGithub({ project }: { project: Project }) {
               ? `Synced ${ago(syncStatus.lastSyncAt)}`
               : "Not synced yet"}
         </span>
+        {readOnly && (
+          <span
+            className="rounded-full border border-border px-2 py-px text-3xs text-muted-foreground"
+            data-testid="forge-read-only"
+            title={`Issues and pull requests are read from ${forge}. Comments, labels, triage, pull requests and merges work only on GitHub until a later phase.`}
+          >
+            {forge} · read-only
+          </span>
+        )}
         <Button size="xs" variant="outline" onClick={() => sync.mutate()} disabled={sync.isPending}>
           <RefreshCw className={cn(sync.isPending && "animate-spin")} /> Sync
         </Button>
@@ -190,7 +207,7 @@ export function ProjectGithub({ project }: { project: Project }) {
           <DialogHeader>
             <DialogTitle>Pull request #{openPr?.number}</DialogTitle>
           </DialogHeader>
-          {openPr && <PrDetailsView prId={openPr.id} />}
+          {openPr && <PrDetailsView prId={openPr.id} readOnly={readOnly} provider={forge} />}
         </DialogContent>
       </Dialog>
     </div>
