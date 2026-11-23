@@ -21,6 +21,7 @@ import { usePrRequestsStore } from "@/stores/pr-requests";
 import { renderWithClient } from "./utils";
 
 const github = projects.find((p) => p.id === "p-billing") as Project;
+const forge = { ...github, kind: "forge" } as unknown as Project;
 const local = projects.find((p) => p.id === "p-notes") as Project;
 
 /** A session the user started in a GitHub project, on its own branch, with no PR yet. */
@@ -48,7 +49,11 @@ describe("canAskForPullRequest", () => {
     expect(canAskForPullRequest(session, github)).toBe(true);
   });
 
-  it("needs a GitHub project", () => {
+  it("offers a PR on a forge project too", () => {
+    expect(canAskForPullRequest(session, forge)).toBe(true);
+  });
+
+  it("needs a GitHub or forge project", () => {
     expect(canAskForPullRequest(session, { ...local })).toBe(false);
     expect(canAskForPullRequest(session, undefined)).toBe(false);
     expect(canAskForPullRequest(undefined, github)).toBe(false);

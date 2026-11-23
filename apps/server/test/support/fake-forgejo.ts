@@ -173,6 +173,12 @@ export class FakeForgejo {
   readonly token = "forge-token";
   /** The `/user` login; `null` makes `/user` answer 403 (a repository-only token). */
   viewer: string | null = "codeden-bot";
+  /**
+   * Live collaborator permissions (`GET /collaborators/{login}/permission`): `write`/`admin`
+   * are trusted, `read` is not, and `null` makes the lookup answer 403 (unknown, never trusted).
+   * A login that is not here is 404, which Forgejo reports as no access.
+   */
+  readonly permissions = new Map<string, "read" | "write" | "admin" | null>();
   /** Approvals branch protection requires per branch; a `null` value answers 403. */
   readonly requiredApprovals = new Map<string, number | null>();
   rateLimited = false;
@@ -332,11 +338,18 @@ export class FakeForgejo {
 
     if (rest === "") return answer(200, this.repository());
     if (rest === "/labels") return this.listLabels(query, answer);
+    if (rest === "/pulls") {
+      return method === "POST"
+        ? this.createPull(bodyOf(body), answer)
+        : this.listPulls(query, answer);
+    }
     if (rest === "/issues") {
       if (method === "POST") return this.createIssue(bodyOf(body), answer);
       return this.listIssues(query, answer);
     }
-    let match = rest.match(/^\/issues\/(\d+)$/);
+    let match = rest.match(/^\/collaborators\/(.+)\/permission$/);
+    if (match) return this.collaboratorPermission(decodeURIComponent(match[1] ?? ""), answer);
+    match = rest.match(/^\/issues\/(\d+)$/);
     if (match) {
       const number = Number(match[1]);
       if (method === "PATCH") return this.editIssue(number, bodyOf(body), answer);
@@ -364,7 +377,9 @@ export class FakeForgejo {
     }
     match = rest.match(/^\/pulls\/(\d+)$/);
     if (match) {
-      const issue = this.issues.get(Number(match[1]));
+      const number = Number(match[1]);
+      if (method === "PATCH") return this.updatePull(number, bodyOf(body), answer);
+      const issue = this.issues.get(number);
       return issue?.pullRequest ? answer(200, this.pull(issue)) : answer(404, notFound());
     }
     match = rest.match(/^\/pulls\/(\d+)\/files$/);
@@ -402,6 +417,89 @@ export class FakeForgejo {
     match = rest.match(/^\/branches\/(.+)$/);
     if (match) return this.branch(decodeURIComponent(match[1] ?? ""), answer);
     return answer(404, notFound());
+  }
+
+  /** `GET /pulls`: open PRs (the create flow finds an existing one by its head branch). */
+  private listPulls(
+    query: URLSearchParams,
+    answer: (status: number, data: unknown, extra?: Record<string, string>) => Response,
+  ): Response {
+    const state = query.get("state") ?? "open";
+    let rows = [...this.issues.values()].filter((issue) => issue.pullRequest);
+    if (state === "open") rows = rows.filter((issue) => issue.state === "open");
+    if (state === "closed") rows = rows.filter((issue) => issue.state === "closed");
+    const page = Number(query.get("page") ?? "1");
+    const limit = Number(query.get("limit") ?? "50");
+    return answer(
+      200,
+      rows.slice((page - 1) * limit, page * limit).map((issue) => this.pull(issue)),
+      { "x-total-count": String(rows.length) },
+    );
+  }
+
+  /** `POST /pulls`: same-repository heads only, and no draft field, as Forgejo's API. */
+  private createPull(
+    body: Record<string, unknown>,
+    answer: (status: number, data: unknown, extra?: Record<string, string>) => Response,
+  ): Response {
+    const head = String(body.head ?? "");
+    const base = String(body.base ?? "");
+    if (!head || !base) return answer(422, { message: "head and base are required" });
+    if (Object.hasOwn(body, "draft")) {
+      return answer(422, { message: "draft is not a field of CreatePullRequestOption" });
+    }
+    const existing = [...this.issues.values()].find(
+      (issue) => issue.pullRequest && issue.state === "open" && issue.headBranch === head,
+    );
+    if (existing) return answer(409, { message: "a pull request already exists for this head" });
+    const issue = this.addPr(head, {
+      title: String(body.title ?? ""),
+      body: String(body.body ?? ""),
+      author: this.viewer ?? "codeden-bot",
+    });
+    this.touch(issue.number, (row) => {
+      row.baseBranch = base;
+    });
+    return answer(201, this.pull(this.issue(issue.number)));
+  }
+
+  /** `PATCH /pulls/{n}`: title, body, state and base; no draft toggle, as Forgejo's API. */
+  private updatePull(
+    number: number,
+    body: Record<string, unknown>,
+    answer: (status: number, data: unknown, extra?: Record<string, string>) => Response,
+  ): Response {
+    const issue = this.issues.get(number);
+    if (!issue?.pullRequest) return answer(404, notFound());
+    if (Object.hasOwn(body, "draft")) {
+      return answer(422, { message: "draft is not a field of EditPullRequestOption" });
+    }
+    const closing = body.state === "closed" && issue.state !== "closed";
+    this.touch(number, (row) => {
+      if (typeof body.title === "string") row.title = body.title;
+      if (typeof body.body === "string") row.body = body.body;
+      if (typeof body.base === "string") row.baseBranch = body.base;
+      if (body.state === "open" || body.state === "closed") row.state = body.state;
+      if (closing) row.closedAt = this.tick();
+      if (body.state === "open") row.closedAt = null;
+    });
+    return answer(200, this.pull(issue));
+  }
+
+  /** `GET /collaborators/{login}/permission`: 404 none, 403 unknown, flags otherwise. */
+  private collaboratorPermission(
+    login: string,
+    answer: (status: number, data: unknown, extra?: Record<string, string>) => Response,
+  ): Response {
+    const permission = this.permissions.get(login);
+    if (permission === null) return answer(403, { message: "permission is not readable" });
+    if (!permission) return answer(404, notFound());
+    return answer(200, {
+      permission,
+      user: { login },
+      ...(permission === "admin" ? { admin: true } : {}),
+      ...(permission === "write" || permission === "admin" ? { push: true } : { pull: true }),
+    });
   }
 
   private listIssues(
@@ -645,7 +743,7 @@ export class FakeForgejo {
       body: review.body ?? "",
       commit_id: issue.headSha,
       submitted_at: review.submittedAt ?? null,
-      html_url: null,
+      html_url: `${this.baseUrl}/${this.owner}/${this.repo}/pulls/${issue.number}#review-${review.id}`,
       official: review.official ?? false,
       stale: review.stale ?? false,
       dismissed: review.dismissed ?? false,

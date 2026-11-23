@@ -92,10 +92,11 @@ export interface ForgejoClientOptions extends ForgejoHttpOptions {
 }
 
 /**
- * A read-first client for the Forgejo REST API v1 (`docs/forges.md` §5). It joins the configured
- * web base with `/api/v1`, sends `Authorization: token <token>`, paginates the endpoints capped at
- * 50 rows, and maps Forgejo JSON onto the forge contracts. Write methods exist for the phases
- * that will use them; nothing calls them yet, and there is no Actions-run internals access.
+ * A client for the Forgejo REST API v1 (`docs/forges.md` §5). It joins the configured web base
+ * with `/api/v1`, sends `Authorization: token <token>`, paginates the endpoints capped at 50
+ * rows, and maps Forgejo JSON onto the forge contracts. Pull request reads and the B2 writes
+ * (create, update, draft refusal) are wired; merge and evidence calls wait for their phases, and
+ * there is no Actions-run internals access.
  *
  * The work is split by concern: identity, issues, pull requests, git reads and contents. This
  * facade keeps one object to hand to an adapter.

@@ -29,7 +29,7 @@ export function usePullRequestOffer(sessionId: string): PullRequestOffer {
   const { data } = useQuery({
     queryKey: ["github", "session", sessionId],
     queryFn: () => client.github.session(sessionId),
-    enabled: project?.kind === "github" && session?.role === "agent",
+    enabled: (project?.kind === "github" || project?.kind === "forge") && session?.role === "agent",
     refetchInterval: 30_000,
   });
   const pr: GitHubPrRef | null = data?.pr

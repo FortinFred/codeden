@@ -1,11 +1,11 @@
 import { z } from "zod";
 import type { AppServices } from "../../../services/container";
 import { defineTool, type ToolAvailabilityContext } from "../../define";
-import { inGithubProject } from "./available";
+import { inPullRequestProject } from "./available";
 
-/** Listed in GitHub projects, except to sessions with read-only permissions (§11.2). */
+/** Listed in GitHub and forge projects, except to sessions with read-only permissions (§11.2). */
 function available(services: AppServices, caller?: ToolAvailabilityContext): boolean {
-  if (!inGithubProject(services, caller)) return false;
+  if (!inPullRequestProject(services, caller)) return false;
   if (!caller?.sessionId) return true;
   try {
     return services.sessions.detail(caller.sessionId).session.autonomy !== "read_only";
@@ -18,7 +18,7 @@ function available(services: AppServices, caller?: ToolAvailabilityContext): boo
 export const createPullRequestTool = defineTool({
   name: "create_pull_request",
   description:
-    "Push your branch and open a pull request for your work (or update the title/body of the one already open for your branch). The body gets `Fixes #<issue>` for your session's issue (or `issue`) and a link to this CodeDen session. Commit your changes first, or pass `commitMessage` to commit everything that is uncommitted. Use `draft: true` for work that is not ready for review. Only for GitHub projects.",
+    "Push your branch and open a pull request for your work on the project's forge (or update the title/body of the one already open for your branch). The body gets `Fixes #<issue>` for your session's issue (or `issue`) and a link to this CodeDen session. Commit your changes first, or pass `commitMessage` to commit everything that is uncommitted. Use `draft: true` for work that is not ready for review; a Forgejo project refuses drafts, so open it ready there. Only for GitHub and forge projects.",
   roles: ["agent"],
   scope: "session",
   isAvailable: available,
@@ -44,12 +44,25 @@ export const createPullRequestTool = defineTool({
       .optional()
       .describe("Commit uncommitted changes with this message before pushing"),
   }),
-  handler: async (input, { services, sessionId }) => {
+  handler: async (input, { services, sessionId, projectId }) => {
     // A factory builder whose spec waits for a person's approval builds nothing yet.
     services.factory.assertMayOpenPr(sessionId);
     const result = await services.github.createPullRequest(sessionId, input);
     const verb = result.created ? "Opened" : "Updated";
     const commit = result.commit ? ` Committed ${result.commit.slice(0, 7)} first.` : "";
-    return `${verb} pull request #${result.number} (${result.state}) from ${result.branch} into ${result.base}: ${result.url}.${commit} Attach evidence with attach_evidence.`;
+    // Evidence is GitHub-only for now (`docs/forges.md` phase D); a forge agent has no such tool.
+    const evidence =
+      projectKind(services, projectId) === "forge" ? "" : " Attach evidence with attach_evidence.";
+    return `${verb} pull request #${result.number} (${result.state}) from ${result.branch} into ${result.base}: ${result.url}.${commit}${evidence}`;
   },
 });
+
+/** The caller's project kind, tolerating a missing look-up in a scripted test. */
+function projectKind(services: AppServices, projectId: string | null): string | null {
+  if (!projectId) return null;
+  try {
+    return services.projects?.get(projectId)?.kind ?? null;
+  } catch {
+    return null;
+  }
+}

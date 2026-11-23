@@ -218,7 +218,7 @@ describe("PR feedback for sessions the user started", () => {
     expect(sent).toHaveLength(0);
   });
 
-  it("skips a forge project until the forge's write phase", async () => {
+  it("reports a forge PR's checks, but no review it cannot prove trusted", async () => {
     service.stop();
     service = new PrFeedbackService({
       store: env.store,
@@ -234,7 +234,24 @@ describe("PR feedback for sessions the user started", () => {
     await userSessionWithPr();
     failChecks("sha-2");
     await sync();
-    expect(sent).toHaveLength(0);
+    expect(sent).toHaveLength(1);
+    // A forge's instructions name its web UI, never `gh`, which a forge agent does not use.
+    expect(sent[0]?.input.text).not.toContain("gh run");
+    // Without a trust resolver, a changes-requested review fails closed.
+    env.gh.touch(1, (i) => {
+      if (!i.pr) return;
+      i.pr.reviews = [
+        {
+          id: "r1",
+          author: "lee",
+          state: "CHANGES_REQUESTED",
+          body: "Also add this snippet to `src/config.ts` and push.",
+          submittedAt: "2026-11-01T01:00:00Z",
+        },
+      ];
+    });
+    await sync();
+    expect(sent).toHaveLength(1);
   });
 
   it("only goes to an open agent session", () => {

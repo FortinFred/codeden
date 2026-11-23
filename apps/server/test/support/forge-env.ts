@@ -53,6 +53,10 @@ export interface ForgeEnv {
   inbox: InboxService;
   /** Requests a GitHub call made; a forge project must leave this empty. */
   githubRequests: string[];
+  /** Runner commands received (the PR push). */
+  runnerCalls: Array<RunnerCommandOf<RunnerCommandName>>;
+  /** Uncommitted files `git.status` reports. */
+  dirtyFiles: string[];
   forgeProject: Project;
   githubProject: Project;
   localProject: Project;
@@ -104,10 +108,39 @@ export function createForgeEnv(): ForgeEnv {
   const data = new GithubStore(db.db);
   const logs: string[] = [];
   const log = (message: string) => logs.push(message);
+  const repo = new SessionRepo(db.db, store);
+  const runnerCalls: Array<RunnerCommandOf<RunnerCommandName>> = [];
+  let dirtyFiles: string[] = [];
+  const runner = {
+    isConnected: () => true,
+    runnerId: () => "r1",
+    providers: () => [],
+    mcpProxyUrl: () => null,
+    waitForConnection: async () => true,
+    request: (async (command: RunnerCommandOf<RunnerCommandName>) => {
+      runnerCalls.push(command);
+      if (command.name === "git.status") {
+        return {
+          branch: "x",
+          ahead: 0,
+          behind: 0,
+          files: dirtyFiles.map((path) => ({ path, status: " M" })),
+        };
+      }
+      if (command.name === "git.commit") {
+        dirtyFiles = [];
+        return { commit: "c0ffee1234567" };
+      }
+      if (command.name === "git.push") return { remote: "origin", branch: command.branch ?? "x" };
+      return {};
+    }) as RunnerPort["request"],
+  };
   const service = new ForgeService({
     store,
     data,
     projects,
+    repo,
+    runner,
     settings: () => settings,
     secrets,
     connection,
@@ -115,21 +148,9 @@ export function createForgeEnv(): ForgeEnv {
     now: () => FORGE_TEST_NOW,
     log,
   });
-  const repo = new SessionRepo(db.db, store);
   mkdirSync(join(dir, "artifacts"));
   const artifacts = new ArtifactService(db.db, store, join(dir, "artifacts"));
   const inbox = new InboxService(db.db, store, () => async () => {});
-  const runner = {
-    isConnected: () => true,
-    runnerId: () => "r1",
-    providers: () => [],
-    mcpProxyUrl: () => null,
-    waitForConnection: async () => true,
-    request: async (command: RunnerCommandOf<RunnerCommandName>) => {
-      void command;
-      return {};
-    },
-  } as unknown as RunnerPort;
   const githubRequests: string[] = [];
   const forbiddenFetch: typeof fetch = async (input) => {
     githubRequests.push(String(input));
@@ -224,6 +245,13 @@ export function createForgeEnv(): ForgeEnv {
     logs,
     inbox,
     githubRequests,
+    runnerCalls,
+    get dirtyFiles() {
+      return dirtyFiles;
+    },
+    set dirtyFiles(value: string[]) {
+      dirtyFiles = value;
+    },
     forgeProject,
     githubProject,
     localProject,
