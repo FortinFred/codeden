@@ -5,6 +5,7 @@ import {
   type CreateProjectRequest,
   type CreateProjectResponse,
   DEFAULT_VISION_PATH,
+  type DisconnectForgeResponse,
   type DisconnectGithubResponse,
   FactoryLimits,
   type ForgejoSettings,
@@ -277,6 +278,51 @@ export class ProjectService {
     if (current.kind !== "github") return { project: current };
     const { github: _github, remoteWarning: _warning, ...rest } = current;
     // Docker sandboxes clone from GitHub: a local project's sessions run locally again.
+    const next: Project = {
+      ...rest,
+      kind: "local",
+      execution: { backend: "local" },
+      updatedAt: new Date().toISOString(),
+    };
+    this.deps.store.append([
+      { type: "project.updated", sessionId: null, payload: { project: next } },
+    ]);
+    return { project: next };
+  }
+
+  /**
+   * Make a forge project local-only: the user's answer to a missing Forgejo remote, or to
+   * changing their mind about the connection. Refused while `origin` still matches the
+   * configured connection (the next check would connect it again) and in a factory mode (which
+   * needs a GitHub project). Clears the forge coordinates and any `remoteWarning`; synced issues
+   * and PRs stay in the database.
+   */
+  async disconnectForge(id: string): Promise<DisconnectForgeResponse> {
+    const project = this.get(id);
+    if (project.kind !== "forge") {
+      throw conflict(`${project.name} is not connected to a forge`, "not_a_forge_project");
+    }
+    if (isFactoryMode(project.autonomyMode)) {
+      throw conflict(
+        "Switch the autonomy mode to assisted or manual before disconnecting the forge",
+        "factory_mode",
+      );
+    }
+    const detected = isDirectory(project.path)
+      ? await detectProject(this.deps.exec, project.path, this.forgeConnections())
+      : null;
+    if (detected?.forge) {
+      const { owner, repo, host } = detected.forge;
+      throw conflict(
+        `origin still matches ${owner}/${repo} on ${host}; change or remove it first`,
+        "forge_remote_present",
+      );
+    }
+    const current = this.get(id);
+    if (current.kind !== "forge") return { project: current };
+    const { forge: _forge, remoteWarning: _warning, ...rest } = current;
+    // Forge projects run locally in phase A1; a future forge backend still needs a GitHub
+    // checkout, so a local project keeps the local backend.
     const next: Project = {
       ...rest,
       kind: "local",

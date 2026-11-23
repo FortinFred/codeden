@@ -5,6 +5,7 @@ import {
   Bell,
   Bot,
   Cpu,
+  GitFork,
   GitPullRequest,
   ImageIcon,
   Info,
@@ -25,6 +26,7 @@ import {
   UtilitySettings,
 } from "@/components/settings/sections-core";
 import { DesktopSettings } from "@/components/settings/sections-desktop";
+import { ForgesSettings } from "@/components/settings/sections-forges";
 import { GithubSettings } from "@/components/settings/sections-github";
 import { ImageSettings } from "@/components/settings/sections-images";
 import { NotificationSettings } from "@/components/settings/sections-media";
@@ -78,6 +80,7 @@ const SECTIONS: { id: string; label: string; icon: LucideIcon; render: () => Rea
   { id: "providers", label: "Providers", icon: Bot, render: () => <ProviderSettings /> },
   { id: "autonomy", label: "Autonomy", icon: ShieldCheck, render: () => <AutonomySettings /> },
   { id: "github", label: "GitHub", icon: GitPullRequest, render: () => <GithubSettings /> },
+  { id: "forges", label: "Forges", icon: GitFork, render: () => <ForgesSettings /> },
   { id: "voice", label: "Voice", icon: Mic, render: () => <VoiceSettings /> },
   { id: "images", label: "Image generation", icon: ImageIcon, render: () => <ImageSettings /> },
   { id: "utility", label: "Utility model", icon: Cpu, render: () => <UtilitySettings /> },

@@ -45,6 +45,9 @@ export function ProjectSourcePicker({
       );
       const facts = [
         detected.github ? `GitHub ${detected.github.owner}/${detected.github.repo}` : null,
+        detected.forge
+          ? `Forgejo ${detected.forge.host}/${detected.forge.owner}/${detected.forge.repo}`
+          : null,
         detected.packageManager ? `Detected ${detected.packageManager}` : null,
         detected.suggestedSetupCommands.length
           ? `suggested setup: ${detected.suggestedSetupCommands.join(" && ")}`
@@ -71,7 +74,7 @@ export function ProjectSourcePicker({
               "folder",
               FolderOpen,
               "Local folder",
-              "Any folder; GitHub features turn on when it has a GitHub remote.",
+              "Any folder; GitHub or a connected Forgejo turns on when its origin matches.",
             ],
             [
               "clone",
@@ -146,7 +149,8 @@ export function AddProjectDialog() {
         <DialogHeader>
           <DialogTitle>Add a project</DialogTitle>
           <DialogDescription>
-            GitHub repos get issues, PRs and evidence. Local folders work too.
+            GitHub repos get issues, PRs and evidence. A folder on a connected Forgejo becomes a
+            forge project. Local folders work too.
           </DialogDescription>
         </DialogHeader>
         <ProjectSourcePicker

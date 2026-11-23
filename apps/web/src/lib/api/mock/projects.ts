@@ -13,6 +13,7 @@ type MockProjectApi = Pick<
   | "reorderProjects"
   | "refreshProject"
   | "disconnectGithub"
+  | "disconnectForge"
 >;
 
 const NOT_GITHUB =
@@ -165,6 +166,26 @@ export function mockProjectApi(world: MockWorld): MockProjectApi {
       }
       const { github: _github, remoteWarning: _warning, ...rest } = current;
       const project: Project = { ...rest, kind: "local", updatedAt: new Date().toISOString() };
+      world.emitDomain({ type: "project.updated", sessionId: null, payload: { project } });
+      return later({ project }, 80);
+    },
+
+    async disconnectForge(id) {
+      const current = find(id);
+      if (current.kind !== "forge") {
+        throw new ApiRequestError(
+          409,
+          "not_a_forge_project",
+          `${current.name} is not connected to a forge`,
+        );
+      }
+      const { forge: _forge, remoteWarning: _warning, ...rest } = current;
+      const project: Project = {
+        ...rest,
+        kind: "local",
+        execution: { backend: "local" },
+        updatedAt: new Date().toISOString(),
+      };
       world.emitDomain({ type: "project.updated", sessionId: null, payload: { project } });
       return later({ project }, 80);
     },

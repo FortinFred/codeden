@@ -4,6 +4,7 @@ import {
   CompactSessionResponse,
   CreateProjectResponse,
   DiffResult,
+  DisconnectForgeResponse,
   DisconnectGithubResponse,
   DismissInboxResponse,
   ExecutionBackendsResponse,
@@ -56,6 +57,7 @@ import {
   httpSecretsApi,
   httpVoiceApi,
 } from "./http-features";
+import { httpForgesApi } from "./http-forges";
 import { httpGithubApi, httpOrchestrationApi, httpSessionConflictApi } from "./http-orchestration";
 import { httpAuthApi, httpNetworkApi } from "./network-api";
 import { httpQueueApi } from "./queue-api";
@@ -192,6 +194,9 @@ export function createHttpClient(origin: string, opts: HttpClientOptions = {}): 
       post(`/projects/${enc(id)}/refresh`, {}, (v) => RefreshProjectResponse.parse(v)),
     disconnectGithub: (id) =>
       post(`/projects/${enc(id)}/disconnect-github`, {}, (v) => DisconnectGithubResponse.parse(v)),
+    disconnectForge: (id) =>
+      post(`/projects/${enc(id)}/disconnect-forge`, {}, (v) => DisconnectForgeResponse.parse(v)),
+    forges: httpForgesApi(http),
     automations: httpAutomationsApi(http),
     factory: httpFactoryApi(http),
 

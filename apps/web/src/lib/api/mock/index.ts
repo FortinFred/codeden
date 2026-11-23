@@ -17,6 +17,7 @@ import { startFactoryDemo } from "./factory-demo";
 import { mockFeatureApis } from "./feature-apis";
 import { makeSession } from "./fixtures/helpers";
 import { setupChecks } from "./fixtures/ops";
+import { mockForgesApi } from "./forges";
 import { mockInboxBulkApi } from "./inbox-bulk";
 import { type Script, scriptedTurn, uid } from "./live";
 import { mockOrchestration } from "./orchestration";
@@ -440,6 +441,7 @@ export function createMockClient(opts: MockClientOptions = {}): CodeDenClient {
     },
     ...workbenchApi(world),
     ...mockFeatureApis(world),
+    ...mockForgesApi(world),
     ...mockOrchestration(world, {
       sendMessage: (id, input, mode) => client.sendMessage(id, input, mode),
       createSession,
