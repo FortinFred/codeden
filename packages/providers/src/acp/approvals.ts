@@ -13,6 +13,8 @@ export interface AcpApprovalDeps {
   policy: AcpPolicy;
   mapper: AcpEventMapper;
   cwd: string;
+  /** The agent's name, for notices ("Copilot CLI", "Cursor"). */
+  label: string;
   mcpServers: readonly string[];
   trustedServers: readonly string[];
   /** The agent's own answer to this request (`AcpExtensions.permission`), if it has one. */
@@ -24,11 +26,32 @@ const CANCELLED: AcpPermissionResult = { outcome: { outcome: "cancelled" } };
 /**
  * Answer `session/request_permission` (§11.2): CodeDen's policy approves or refuses the call
  * on the spot (recorded in the transcript as decided by policy), or it becomes an
- * `approval_request` the user answers. Only "once" options are ever chosen: an agent's
- * "always" option saves a rule in the agent's own settings, so `allow_session` is remembered by
- * CodeDen for this session instead. A cancelled turn answers `cancelled`, as ACP requires.
+ * `approval_request` the user answers. It never throws and never fails the request: Copilot CLI
+ * records a failed `session/request_permission` as a user denial and ends the (sub)agent's turn
+ * without telling anyone (copilot-cli#5514), so a request CodeDen can't decide is refused with
+ * its own answer and a visible notice instead. "Once" options win; an "always" option is chosen
+ * only when the agent offers no "once" one, since it saves a rule in the agent's own settings
+ * (CodeDen remembers `allow_session` itself for that case). A request with nothing CodeDen can
+ * select is answered `cancelled`, with a notice: the agent may then end its turn silently.
  */
 export async function answerPermission(
+  req: AcpPermissionRequest,
+  deps: AcpApprovalDeps,
+): Promise<AcpPermissionResult> {
+  try {
+    return await decidePermission(req, deps);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    deps.mapper.notice(
+      "warning",
+      `CodeDen could not answer ${deps.label}'s permission request (${shorten(reason, 200)}). The call was refused.`,
+      "approval_failed",
+    );
+    return answerOrCancel(req.options, "reject", deps, "refuse");
+  }
+}
+
+async function decidePermission(
   req: AcpPermissionRequest,
   deps: AcpApprovalDeps,
 ): Promise<AcpPermissionResult> {
@@ -50,7 +73,7 @@ export async function answerPermission(
         decidedBy: "policy",
       });
     }
-    return select(req.options, "allow");
+    return answerOrCancel(req.options, "allow", deps, "allow");
   }
   if (decision.kind === "deny") {
     deps.broker.record(ctx, {
@@ -60,21 +83,44 @@ export async function answerPermission(
       decision: "deny",
       decidedBy: "policy",
     });
-    return select(req.options, "reject");
+    return answerOrCancel(req.options, "reject", deps, "refuse");
   }
   const response = await deps.broker.request(ctx, item);
   if (response.kind === "approval" && response.decision !== "deny") {
     if (response.decision === "allow_session") deps.policy.allowForSession(call);
-    return select(req.options, "allow");
+    return answerOrCancel(req.options, "allow", deps, "allow");
   }
-  if (response.kind === "approval") return select(req.options, "reject");
+  if (response.kind === "approval") {
+    return answerOrCancel(req.options, "reject", deps, "refuse");
+  }
   return CANCELLED;
 }
 
 /**
- * The "once" option of a kind: allow or reject. Never an "always" option, which would save a
- * rule in the agent's own settings: without a "once" option to allow with, the call is
- * refused once, and without any "once" option the request is answered `cancelled`.
+ * Select an answer, or, when the agent offered no option of that kind at all, say in the
+ * transcript that the request can only be cancelled: an unanswered call would otherwise end the
+ * agent's turn with nothing to show for it (copilot-cli#5514).
+ */
+function answerOrCancel(
+  options: readonly AcpPermissionOption[],
+  want: "allow" | "reject",
+  deps: Pick<AcpApprovalDeps, "mapper" | "label">,
+  verb: "allow" | "refuse",
+): AcpPermissionResult {
+  const result = select(options, want);
+  if (result.outcome.outcome === "selected") return result;
+  deps.mapper.notice(
+    "warning",
+    `${deps.label} asked for permission but offered no option to ${verb} the call, so the request was cancelled and its turn may end.`,
+    "approval_unanswerable",
+  );
+  return CANCELLED;
+}
+
+/**
+ * The option to answer a request with: the "once" option of a kind, else (when the agent offers
+ * no "once" option) its "always" option. An agent with neither leaves nothing to select, so the
+ * request is answered `cancelled`; a refusal also never picks an allow option.
  */
 export function select(
   options: readonly AcpPermissionOption[],
@@ -82,7 +128,12 @@ export function select(
 ): AcpPermissionResult {
   const list = Array.isArray(options) ? options : [];
   const option =
-    list.find((o) => o.kind === `${want}_once`) ?? list.find((o) => o.kind === "reject_once");
+    list.find((o) => o.kind === `${want}_once`) ??
+    list.find((o) => o.kind === `${want}_always`) ??
+    // Approval but no allow option: refuse rather than let the call run unanswered.
+    (want === "allow"
+      ? list.find((o) => o.kind === "reject_once" || o.kind === "reject_always")
+      : undefined);
   return option ? { outcome: { outcome: "selected", optionId: option.optionId } } : CANCELLED;
 }
 
@@ -99,7 +150,11 @@ function levelName(level: string): string {
   return level === "full" ? "Full" : level === "supervised" ? "Supervised" : "Auto";
 }
 
-/** The approval card for a permission request. */
+/**
+ * The approval card for a permission request. A call a subagent made says so in its title
+ * (`call.agent`, the agent's own id for it): Copilot CLI's subagent asks arrive on the root
+ * session, and the ask itself doesn't name the subagent.
+ */
 export function approvalItem(
   call: AcpToolState,
   decision: AcpPolicyDecision,
@@ -121,12 +176,13 @@ export function approvalItem(
     options: ["allow_once", "allow_session", "deny"] as ItemOf<"approval_request">["options"],
   };
   const title = call.title?.trim();
+  const prefix = call.agent ? "Subagent: " : "";
   switch (call.kind) {
     case "execute": {
       const command = commandOf(call);
       return {
         ...base,
-        title: `Run \`${shorten(command, 100)}\``,
+        title: `${prefix}Run \`${shorten(command, 100)}\``,
         command,
         cwd: workdirOf(call, deps.cwd),
       };
@@ -138,8 +194,9 @@ export function approvalItem(
       const verb = call.kind === "delete" ? "Delete" : call.kind === "move" ? "Move" : "Edit";
       return {
         ...base,
-        title:
-          paths.length === 1 ? `${verb} ${paths[0]}` : title || `${verb} ${paths.length} files`,
+        title: `${prefix}${
+          paths.length === 1 ? `${verb} ${paths[0]}` : title || `${verb} ${paths.length} files`
+        }`,
         ...(paths.length ? { paths } : {}),
       };
     }
@@ -147,7 +204,7 @@ export function approvalItem(
       const mcp = mcpOf(call, deps.mcpServers);
       return {
         ...base,
-        title: mcp ? `Run ${mcp.server}: ${mcp.tool}` : title || `Allow ${base.toolName}`,
+        title: `${prefix}${mcp ? `Run ${mcp.server}: ${mcp.tool}` : title || `Allow ${base.toolName}`}`,
       };
     }
   }

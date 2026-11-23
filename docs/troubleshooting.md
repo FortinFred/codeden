@@ -142,6 +142,21 @@ Don't delete CodeDen's chats (with Backspace or Delete in `agent ls`, or from Cu
 
 Copilot CLI saves every prompted session in `~/.copilot/session-store.db`, and `copilot --resume` lists them across folders, CodeDen's included (agent sessions, factory builders and reviewers, PMs and the orchestrator). It has no ACP request to archive or hide a conversation, so CodeDen can't keep its sessions out of that list; `vendorHistory` stays unset. An empty session, such as the one detection opens to check the sign-in, saves nothing.
 
+### A Copilot CLI turn ends right after a tool asks
+
+You see a turn run, a tool starts (often one a subagent is running), and then the turn ends with no reply — sometimes with "Info: Operation cancelled by user", sometimes with nothing at all. The permission request CodeDen received was answered with a cancellation or an error, and Copilot CLI 1.0.114 treats either as a user denial: it ends that (sub)agent's turn without another model call and without telling you (upstream issue [copilot-cli#5514](https://github.com/github/copilot-cli/issues/5514)).
+
+CodeDen now avoids both answers: every request it can see is answered with an option Copilot offered (`Allow once`/`Deny`, or its "always" option when that is all it offers), and a request that arrives when no turn is running — a background subagent, or work that outlived the prompt — opens a small turn of its own so the approval card is shown. Subagent asks are titled **Subagent: …** because Copilot repeats the call on the session without saying which subagent made it.
+
+What you can still see:
+
+- **A warning saying the request offered no option to allow or refuse it.** Copilot ended that turn because there was nothing CodeDen could answer with. Update the CLI (`copilot update`): the option set is Copilot's, not CodeDen's.
+- **An approval card that stays open while a background task waits.** Answer it; Copilot's background work is holding on it. Stop cancels it and ends the turn as interrupted.
+- **A turn that ends after you press Deny.** That is Copilot's behaviour: a denial ends the turn ("Operation cancelled by user"). Send another message to continue.
+- **A tool that never asked but you expected it to.** Copilot's own saved approvals (`~/.copilot/permissions-config.json`, `allowedUrls`, trusted folders), an organization **ask**/**deny** rule, a permission-request hook, its sandbox, or its `--allow-tool`/`--deny-tool` launch flags applied before CodeDen saw anything. CodeDen never writes those files and never passes the allow-all flags; clear the saved approvals in Copilot CLI (`/reset-allowed-tools`) if you want every call to reach CodeDen.
+
+If a subagent asks and no card appears even though a turn is running, it is the upstream bug: CodeDen can only answer requests Copilot sends. Send the turn's text to CodeDen's logs (`CODEDEN_DEBUG=1`) with the CLI version, and update Copilot CLI when a fix ships.
+
 ### Copilot CLI asks for an update, or its sign-in can't be confirmed
 
 CodeDen needs Copilot CLI **1.0.105** or newer: earlier builds accepted tool calls in ACP mode without sending `session/request_permission`, so CodeDen's approvals would be bypassed. Run `copilot update`, then press **Re-check**. Detection opens one empty `copilot --acp` session in a scratch folder: if the CLI is signed out and has no model provider of its own, it refuses, and the row offers **Sign in**, which runs `copilot login` in the terminal. A refusal for another reason shows as **Could not confirm the Copilot CLI sign-in** with Copilot's message in the row's details; sessions may still work. Copilot's saved approvals and `allowedUrls` apply before CodeDen sees a request, so clear them in Copilot CLI if you want every call to reach CodeDen.

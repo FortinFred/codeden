@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { AgentEvent, ItemOf, RuntimeResponse, SessionOptions } from "@codeden/contracts";
 import { afterEach, beforeEach } from "vitest";
 import type { ProviderSession } from "../../src/adapter";
+import { CopilotAdapter } from "../../src/copilot/adapter";
 import { CursorAdapter } from "../../src/cursor/adapter";
 import { readJsonLines } from "./json-lines";
 
@@ -14,6 +15,9 @@ export const fakeAgent = {
   script: join(import.meta.dirname, "..", "fixtures", "fake-acp", "agent.mjs"),
 };
 
+/** A version Copilot CLI's adapter accepts, for the same scripted agent. */
+export const FAKE_COPILOT_VERSION = "1.0.114";
+
 export type Step = Record<string, unknown>;
 export type Logged = { method: string; params: Record<string, unknown> & { outcome?: unknown } };
 export type Request = ItemOf<"approval_request"> | ItemOf<"user_question">;
@@ -23,16 +27,20 @@ export const chunk = (text: string, session?: string): Step => ({
   ...(session ? { session } : {}),
 });
 
-export const permission = (toolCall: Record<string, unknown>, sessionId?: string): Step => ({
+export const permission = (
+  toolCall: Record<string, unknown>,
+  sessionId?: string,
+  options: { optionId: string; kind: string; name?: string }[] = [
+    { optionId: "allow-once", name: "Allow once", kind: "allow_once" },
+    { optionId: "allow-always", name: "Always allow", kind: "allow_always" },
+    { optionId: "reject-once", name: "Reject", kind: "reject_once" },
+  ],
+): Step => ({
   request: "session/request_permission",
   params: {
     ...(sessionId ? { sessionId } : {}),
     toolCall,
-    options: [
-      { optionId: "allow-once", name: "Allow once", kind: "allow_once" },
-      { optionId: "allow-always", name: "Always allow", kind: "allow_always" },
-      { optionId: "reject-once", name: "Reject", kind: "reject_once" },
-    ],
+    options,
   },
 });
 
@@ -122,6 +130,18 @@ export function fakeAcp() {
     async open(script: Step[], extra: Partial<SessionOptions> = {}) {
       const adapter = new CursorAdapter({ executable: fakeAgent });
       const session = await adapter.openSession(acp.options(script, extra));
+      sessions.push(session);
+      return { session, reader: new Reader(session), adapter };
+    },
+    /** The same scripted agent as Copilot CLI (`copilot --acp`), which needs a 1.0.x version. */
+    async openCopilot(script: Step[], extra: Partial<SessionOptions> = {}) {
+      const adapter = new CopilotAdapter({ executable: fakeAgent, probeTimeoutMs: 5_000 });
+      const session = await adapter.openSession(
+        acp.options(script, {
+          ...extra,
+          env: { FAKE_ACP_VERSION: FAKE_COPILOT_VERSION, ...extra.env },
+        }),
+      );
       sessions.push(session);
       return { session, reader: new Reader(session), adapter };
     },

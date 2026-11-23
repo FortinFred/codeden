@@ -17,6 +17,7 @@ import {
   type AcpToolState,
   addFacts,
   blockText,
+  mcpOf,
   mergeToolCall,
   toolCallItem,
 } from "./items";
@@ -121,8 +122,13 @@ export class AcpEventMapper {
   tool(call: AcpToolCall): AcpToolState {
     const known = this.tools.get(call.toolCallId);
     const state: AcpToolState = known ? { ...known } : { toolCallId: call.toolCallId };
+    // A permission request may repeat the call with less than the agent already told CodeDen
+    // (Copilot sends the tool's own title, where its tool call named the MCP server and tool),
+    // so an MCP identity the agent showed stays: it is how CodeDen's own tools are recognised.
+    const mcp = known ? mcpOf(known, this.opts.tools.mcpServers) : undefined;
     mergeToolCall(state, call);
     addFacts(state, this.opts.describeTool?.(call));
+    if (mcp) state.mcp = mcp;
     return state;
   }
 

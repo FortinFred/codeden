@@ -225,6 +225,12 @@ export class AcpPolicy {
     if (kind === "execute") {
       return `execute:${workdirOf(call, this.ctx.cwd)}\n${commandOf(call)}`;
     }
+    // A URL approval covers that URL only: titles are the same for every fetch ("Fetch content
+    // from this URL."), so keying on one would approve every other host too.
+    if (kind === "fetch") {
+      const url = str(call.rawInput, "url")?.trim();
+      return `fetch:${url || call.title || call.name || ""}`;
+    }
     const paths = pathsOf(call, this.ctx.cwd).sort().join("\n");
     return `${kind}:${call.name ?? ""}:${paths || (call.title ?? "")}`;
   }

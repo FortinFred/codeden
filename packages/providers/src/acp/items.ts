@@ -18,6 +18,8 @@ import type { AcpContentBlock, AcpToolCall, AcpToolContent } from "./protocol";
 export interface AcpToolFacts {
   mcp?: { server: string; tool: string };
   cwd?: string;
+  /** The agent's own id for the subagent that made the call, when it says (Copilot's `agentId`). */
+  agent?: string;
 }
 
 /** What is known about one tool call: the merged `tool_call` and `tool_call_update`s. */
@@ -34,6 +36,7 @@ export interface AcpToolState extends AcpToolCall, AcpToolFacts {
 export function addFacts(state: AcpToolState, facts: AcpToolFacts | undefined): void {
   if (facts?.mcp?.server && facts.mcp.tool) state.mcp = { ...facts.mcp };
   if (facts?.cwd) state.cwd = facts.cwd;
+  if (facts?.agent) state.agent = facts.agent;
 }
 
 /** Context for mapping: the worktree (relative paths resolve against it) and MCP server names. */

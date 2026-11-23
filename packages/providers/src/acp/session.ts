@@ -63,6 +63,8 @@ export class AcpSession implements ProviderSession {
   private instructions: string | undefined;
   private mode: string | undefined;
   private planning: boolean;
+  /** A turn opened only to host a permission request that arrived with no turn running. */
+  private hostTurn: { turnId: string; open: number; interrupted: boolean } | undefined;
   /** Warnings for the next turn's transcript (a notice needs a turn to sit in). */
   private notices: Array<{ message: string; code: string }> = [];
 
@@ -181,6 +183,7 @@ export class AcpSession implements ProviderSession {
       return;
     }
     this.interrupted = true;
+    if (this.hostTurn) this.hostTurn.interrupted = true;
     this.broker.cancelAll();
     if (this.acpSession) this.rpc?.notify("session/cancel", { sessionId: this.acpSession });
     setTimeout(() => {
@@ -195,6 +198,7 @@ export class AcpSession implements ProviderSession {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    this.hostTurn = undefined;
     this.broker.cancelAll();
     this.mapper.endTurn({ type: "interrupted" });
     this.events.close();
@@ -432,17 +436,27 @@ export class AcpSession implements ProviderSession {
     if (message.method === "session/request_permission") {
       const req = message.params as AcpPermissionRequest;
       const ext = this.config.spec.extensions;
-      return answerPermission(req, {
-        broker: this.broker,
-        policy: this.policy,
-        mapper,
-        cwd: this.opts.cwd,
-        mcpServers: this.mcpServers,
-        trustedServers: this.trusted,
-        ...(ext?.permission
-          ? { own: (call) => ext.permission?.(req, call, this.host(sessionIdOf(req))) }
-          : {}),
-      });
+      // An agent's background work (Copilot CLI's background subagents, say) can ask after its
+      // prompt's turn ended. The ask gets a turn of its own so it reaches the user; without one
+      // it would have nowhere to sit, and a `cancelled` answer ends that work silently
+      // (copilot-cli#5514).
+      this.openHostTurn(mapper);
+      try {
+        return await answerPermission(req, {
+          broker: this.broker,
+          policy: this.policy,
+          mapper,
+          cwd: this.opts.cwd,
+          label: this.config.spec.label,
+          mcpServers: this.mcpServers,
+          trustedServers: this.trusted,
+          ...(ext?.permission
+            ? { own: (call) => ext.permission?.(req, call, this.host(sessionIdOf(req))) }
+            : {}),
+        });
+      } finally {
+        this.closeHostTurn();
+      }
     }
     const handled = this.config.spec.extensions?.request?.(
       message.method,
@@ -451,6 +465,42 @@ export class AcpSession implements ProviderSession {
     );
     if (handled) return handled;
     throw new AcpRpcError(METHOD_NOT_FOUND, `CodeDen does not support ${message.method}`);
+  }
+
+  /**
+   * A permission request with no turn running opens a turn to hold its card. Requests that
+   * arrive together share it, and the last one answered closes it; a real turn (any turn with a
+   * prompt behind it) is never touched.
+   */
+  private openHostTurn(mapper: AcpEventMapper): void {
+    const host = this.hostTurn;
+    if (host) {
+      host.open++;
+      return;
+    }
+    if (mapper.ctx()) return;
+    const turnId = `turn-background-${randomUUID()}`;
+    this.hostTurn = { turnId, open: 1, interrupted: false };
+    mapper.beginTurn(turnId);
+    mapper.notice(
+      "info",
+      `${this.config.spec.label} asked for permission while no turn was running (a background subagent, or work that outlived the prompt).`,
+      "background_approval",
+    );
+  }
+
+  private closeHostTurn(): void {
+    const host = this.hostTurn;
+    if (!host) return;
+    if (--host.open > 0) return;
+    this.hostTurn = undefined;
+    if (this.mapper.currentTurnId === host.turnId) {
+      this.mapper.endTurn(
+        host.interrupted
+          ? { type: "interrupted", reason: "user" }
+          : { type: "completed", stopReason: "end_turn" },
+      );
+    }
   }
 
   /** Show a warning in the next turn (once, however often the agent restarts before it). */
@@ -469,6 +519,7 @@ export class AcpSession implements ProviderSession {
   private onExit(rpc: AcpRpc, code: number | null, stderr: string): void {
     if (this.closed || rpc !== this.rpc) return;
     this.rpc = undefined;
+    this.hostTurn = undefined;
     this.broker.cancelAll();
     this.mapper.endTurn(exitedOutcome(this.config.spec.label, code, stderr));
     this.turnPending = false;

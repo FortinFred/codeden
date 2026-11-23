@@ -1,11 +1,11 @@
-// A scripted stand-in for an ACP agent (`agent acp`, protocol version 1) and the Cursor CLI
-// commands detection runs. No model is ever called.
+// A scripted stand-in for an ACP agent (`agent acp` / `copilot --acp`, protocol version 1) and
+// the Cursor CLI commands detection runs. No model is ever called.
 //   agent.mjs --version        prints FAKE_ACP_VERSION (default 2026.10.22-abc1234)
 //   agent.mjs status           prints FAKE_ACP_STATUS (default "Logged in as dev@example.com")
 //   agent.mjs --list-models    prints a model list; FAKE_ACP_LIST_MODELS=auth fails like a CLI
 //                              whose stored login can't be used (while `status` still says
 //                              "Logged in")
-//   agent.mjs acp              serves ACP on stdio; FAKE_ACP_NO_ACP=1 fails like an old CLI
+//   agent.mjs acp|--acp        serves ACP on stdio; FAKE_ACP_NO_ACP=1 fails like an old CLI
 // FAKE_ACP_LOG: every message the client sends, and every answer to the agent's requests
 // (`{ method: "answer:<method>", params }`), one JSON line each.
 // FAKE_ACP_SCRIPT: a JSON file of steps each `session/prompt` runs in order:
@@ -15,6 +15,8 @@
 //   { "notify": "<method>", "params" }    an agent notification
 //   { "hang": true }                      wait for session/cancel (the prompt then ends cancelled)
 //   { "stopReason": "...", "usage": {} }  how the prompt ends (default end_turn)
+//   { "late": "<method>", "params": {} }  an agent request sent after the prompt's result, as
+//                                         background work does (`after`: ms to wait, default 20)
 // FAKE_ACP_LOAD=fail makes session/load fail; otherwise it replays a short history first,
 // a subagent's child session included.
 // FAKE_ACP_HOLD=<method> with FAKE_ACP_GATE=<file>: that request (`initialize`, `session/new`,
@@ -48,8 +50,12 @@ if (args[0] === "--list-models") {
   console.log("Available models\n\nauto - Auto (current)\ngpt-5 - GPT-5\nsonnet-4.5 - Claude 4.5 Sonnet");
   process.exit(0);
 }
-if (args[0] !== "acp" || process.env.FAKE_ACP_NO_ACP === "1") {
+if (args[0] !== "acp" && args[0] !== "--acp") {
   console.error(`error: unknown command '${args[0] ?? ""}'`);
+  process.exit(1);
+}
+if (process.env.FAKE_ACP_NO_ACP === "1") {
+  console.error("error: unknown command 'acp'");
   process.exit(1);
 }
 
@@ -103,15 +109,24 @@ async function prompt(msg) {
     };
   });
   let end = { stopReason: "end_turn" };
+  const late = [];
   for (const step of script) {
     if (cancelled) break;
     if (step.update) update(step.update, step.session);
     else if (step.notify) send({ method: step.notify, params: { sessionId: session, ...step.params } });
     else if (step.request) await ask(step.request, step.params ?? {});
+    else if (step.late) late.push(step);
     else if (step.hang) await hang;
     else if (step.stopReason) end = { stopReason: step.stopReason, ...(step.usage ? { usage: step.usage } : {}) };
   }
   send({ id: msg.id, result: cancelled ? { stopReason: "cancelled" } : end });
+  // Work that outlives the prompt (a background subagent) asks after its result.
+  for (const step of late) {
+    setTimeout(
+      () => void ask(step.late, step.params ?? {}),
+      cancelled ? 1000 : (step.after ?? 20),
+    ).unref();
+  }
 }
 
 createInterface({ input: process.stdin }).on("line", (line) => {
