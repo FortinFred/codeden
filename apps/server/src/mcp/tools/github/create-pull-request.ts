@@ -44,25 +44,12 @@ export const createPullRequestTool = defineTool({
       .optional()
       .describe("Commit uncommitted changes with this message before pushing"),
   }),
-  handler: async (input, { services, sessionId, projectId }) => {
+  handler: async (input, { services, sessionId }) => {
     // A factory builder whose spec waits for a person's approval builds nothing yet.
     services.factory.assertMayOpenPr(sessionId);
     const result = await services.github.createPullRequest(sessionId, input);
     const verb = result.created ? "Opened" : "Updated";
     const commit = result.commit ? ` Committed ${result.commit.slice(0, 7)} first.` : "";
-    // Evidence is GitHub-only for now (`docs/forges.md` phase D); a forge agent has no such tool.
-    const evidence =
-      projectKind(services, projectId) === "forge" ? "" : " Attach evidence with attach_evidence.";
-    return `${verb} pull request #${result.number} (${result.state}) from ${result.branch} into ${result.base}: ${result.url}.${commit}${evidence}`;
+    return `${verb} pull request #${result.number} (${result.state}) from ${result.branch} into ${result.base}: ${result.url}.${commit} Attach evidence with attach_evidence.`;
   },
 });
-
-/** The caller's project kind, tolerating a missing look-up in a scripted test. */
-function projectKind(services: AppServices, projectId: string | null): string | null {
-  if (!projectId) return null;
-  try {
-    return services.projects?.get(projectId)?.kind ?? null;
-  } catch {
-    return null;
-  }
-}

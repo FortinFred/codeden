@@ -192,6 +192,20 @@ export class FakeForgejo {
   readonly statuses = new Map<string, FakeForgejoStatus[]>();
   /** Branch heads by name (the default branch starts at `base-sha`). */
   readonly branchHeads = new Map<string, string>([["main", "base-sha"]]);
+  /** Attachments uploaded to an issue or PR, in order (phase D). */
+  readonly attachments: Array<{ id: number; number: number; name: string; url: string }> = [];
+  /** Whether the attachment API is enabled; false makes every upload a 404, as a disabled instance. */
+  attachmentsEnabled = true;
+  /** The largest attachment the fake accepts; a bigger one answers 413. */
+  maxAttachmentBytes = 2 * 1024 * 1024 * 1024;
+  /**
+   * Files written through the Contents API, keyed by `<branch>\0<path>`: the vision file and
+   * the evidence fallback. `main` is the default branch.
+   */
+  readonly files = new Map<
+    string,
+    { branch: string; path: string; contents: string; sha: string }
+  >();
   /** Git commits by SHA (tree and parents), for `revertMatches`. */
   readonly gitCommits = new Map<string, { message?: string; tree: string; parents: string[] }>();
   /** What `GET /compare/{base}...{head}` answers; null: nothing behind and no files. */
@@ -328,6 +342,13 @@ export class FakeForgejo {
     const method = (init?.method ?? "GET").toUpperCase();
     const headers = new Headers(init?.headers);
     const body = typeof init?.body === "string" ? init.body : "";
+    let attachment: { name: string; size: number } | null = null;
+    if (init?.body instanceof FormData) {
+      const file = init.body.get("attachment");
+      if (file !== null && typeof file !== "string") {
+        attachment = { name: file.name || "attachment", size: file.size };
+      }
+    }
     const record: FakeForgeRequest = {
       method,
       url: url.pathname + url.search,
@@ -347,7 +368,7 @@ export class FakeForgejo {
     if (this.rateLimited) {
       return answer(429, { message: "too many requests" }, { "retry-after": "30" });
     }
-    return this.route(url.pathname, url.searchParams, method, body, answer);
+    return this.route(url.pathname, url.searchParams, method, body, answer, attachment);
   };
 
   private route(
@@ -356,6 +377,7 @@ export class FakeForgejo {
     method: string,
     body: string,
     answer: (status: number, data: unknown, extra?: Record<string, string>) => Response,
+    attachment: { name: string; size: number } | null = null,
   ): Response {
     if (path === "/api/v1/version") return answer(200, { version: "17.0.2" });
     if (path === "/api/v1/user") {
@@ -404,6 +426,12 @@ export class FakeForgejo {
       const name = decodeURIComponent(match[2] ?? "");
       return method === "DELETE"
         ? this.removeLabel(Number(match[1]), name, answer)
+        : answer(405, { message: "method not allowed" });
+    }
+    match = rest.match(/^\/issues\/(\d+)\/assets$/);
+    if (match) {
+      return method === "POST"
+        ? this.uploadAttachment(Number(match[1]), attachment, answer)
         : answer(405, { message: "method not allowed" });
     }
     match = rest.match(/^\/pulls\/(\d+)$/);
@@ -481,10 +509,42 @@ export class FakeForgejo {
       });
     }
     match = rest.match(/^\/contents\/(.+)$/);
-    if (match) return this.contents(decodeURIComponent(match[1] ?? ""), answer);
+    if (match) {
+      return this.contents(method, decodeURIComponent(match[1] ?? ""), query, body, answer);
+    }
     match = rest.match(/^\/branches\/(.+)$/);
-    if (match) return this.branch(decodeURIComponent(match[1] ?? ""), answer);
+    if (match) {
+      const name = decodeURIComponent(match[1] ?? "");
+      return method === "DELETE" ? this.deleteBranch(name, answer) : this.branch(name, answer);
+    }
     return answer(404, notFound());
+  }
+
+  /** `POST /issues/{n}/assets`: one attachment; disabled is 404, past the limit is 413. */
+  private uploadAttachment(
+    number: number,
+    attachment: { name: string; size: number } | null,
+    answer: (status: number, data: unknown, extra?: Record<string, string>) => Response,
+  ): Response {
+    if (!this.issues.has(number)) return answer(404, notFound());
+    if (!this.attachmentsEnabled) {
+      return answer(404, { message: "attachments are disabled on this instance" });
+    }
+    if (!attachment) return answer(422, { message: "attachment is required" });
+    if (attachment.size > this.maxAttachmentBytes) {
+      return answer(413, { message: "the attachment is larger than this instance allows" });
+    }
+    const id = this.nextId++;
+    const url = `${this.baseUrl}/attachments/${id}`;
+    this.attachments.push({ id, number, name: attachment.name, url });
+    return answer(201, {
+      id,
+      name: attachment.name,
+      size: attachment.size,
+      browser_download_url: url,
+      download_url: url,
+      html_url: url,
+    });
   }
 
   /** `GET /pulls`: open PRs (the create flow finds an existing one by its head branch). */
@@ -779,11 +839,33 @@ export class FakeForgejo {
     return answer(200, null);
   }
 
-  /** A workflow directory's files (`GET /contents/<dir>`); a missing directory is 404. */
+  /**
+   * `GET`/`PUT /contents/<path>`: a stored file on a ref (the vision file and evidence fallback),
+   * a workflow directory's listing, or a write that creates/updates one file and, with
+   * `new_branch`, the branch from `branch`.
+   */
   private contents(
+    method: string,
     path: string,
+    query: URLSearchParams,
+    body: string,
     answer: (status: number, data: unknown, extra?: Record<string, string>) => Response,
   ): Response {
+    if (method === "PUT") return this.putFile(path, bodyOf(body), answer);
+    const ref = query.get("ref") ?? "main";
+    const stored = this.files.get(fileKey(ref, path));
+    if (stored) {
+      return answer(200, {
+        name: path.split("/").pop() ?? path,
+        path,
+        sha: stored.sha,
+        size: Buffer.from(stored.contents, "base64").length,
+        content: stored.contents,
+        encoding: "base64",
+        html_url: `${this.baseUrl}/${this.owner}/${this.repo}/src/branch/${ref}/${path}`,
+        download_url: null,
+      });
+    }
     const clean = path.replace(/\/+$/, "");
     const files = this.workflowFiles.filter((file) => file.startsWith(`${clean}/`));
     if (files.length === 0) return answer(404, notFound());
@@ -793,6 +875,69 @@ export class FakeForgejo {
     );
   }
 
+  /** `PUT /contents/<path>`: create or update one file; Forgejo needs `sha` to update one. */
+  private putFile(
+    path: string,
+    body: Record<string, unknown>,
+    answer: (status: number, data: unknown, extra?: Record<string, string>) => Response,
+  ): Response {
+    const contents = String(body.content ?? "");
+    const branch = String(body.branch ?? "main");
+    const newBranch = typeof body.new_branch === "string" ? body.new_branch : undefined;
+    if (newBranch && newBranch !== branch) {
+      if (!this.branchHeads.has(branch)) return answer(404, notFound());
+      this.copyBranch(branch, newBranch);
+    }
+    const target = newBranch ?? branch;
+    if (!this.branchHeads.has(target)) return answer(404, notFound());
+    const existing = this.files.get(fileKey(target, path));
+    if (existing && typeof body.sha !== "string") {
+      return answer(422, { message: "sha is required to update a file" });
+    }
+    if (existing && body.sha !== existing.sha)
+      return answer(409, { message: "sha does not match" });
+    if (!existing && typeof body.sha === "string") {
+      return answer(422, { message: "sha is not needed to create a file" });
+    }
+    const sha = `blob-${this.nextId++}`;
+    const commitSha = `commit-${this.nextId++}`;
+    this.files.set(fileKey(target, path), { branch: target, path, contents, sha });
+    this.branchHeads.set(target, commitSha);
+    return answer(201, {
+      content: {
+        name: path.split("/").pop() ?? path,
+        path,
+        sha,
+        size: Buffer.from(contents, "base64").length,
+        content: contents,
+        encoding: "base64",
+      },
+      commit: { sha: commitSha, message: String(body.message ?? "") },
+    });
+  }
+
+  /** A branch's files are its base's at creation, as a real `new_branch` is. */
+  private copyBranch(from: string, to: string): void {
+    if (this.branchHeads.has(to)) return;
+    this.branchHeads.set(to, this.branchHeads.get(from) ?? "base-sha");
+    for (const file of [...this.files.values()]) {
+      if (file.branch === from) this.files.set(fileKey(to, file.path), { ...file, branch: to });
+    }
+  }
+
+  /** `DELETE /branches/{name}`: the stale vision branch reset. */
+  private deleteBranch(
+    name: string,
+    answer: (status: number, data: unknown, extra?: Record<string, string>) => Response,
+  ): Response {
+    if (!this.branchHeads.has(name)) return answer(404, notFound());
+    this.branchHeads.delete(name);
+    for (const [key, file] of [...this.files]) {
+      if (file.branch === name) this.files.delete(key);
+    }
+    return answer(204, null);
+  }
+
   private branch(
     name: string,
     answer: (status: number, data: unknown, extra?: Record<string, string>) => Response,
@@ -800,6 +945,7 @@ export class FakeForgejo {
     if (this.requiredApprovals.get(name) === null) {
       return answer(403, { message: "branch protection is not readable" });
     }
+    if (!this.branchHeads.has(name)) return answer(404, notFound());
     const required = this.requiredApprovals.get(name) ?? 0;
     return answer(200, {
       name,
@@ -925,6 +1071,11 @@ function combinedState(statuses: FakeForgejoStatus[]) {
 
 function notFound() {
   return { message: "not found" };
+}
+
+/** The key a contents file is stored under per branch (branch names never contain NUL). */
+function fileKey(branch: string, path: string): string {
+  return `${branch}\u0000${path}`;
 }
 
 /** A write's request body as an object (an empty or unparsable body is `{}`). */

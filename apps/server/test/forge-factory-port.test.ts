@@ -440,11 +440,11 @@ describe("forge factory intake and projection", () => {
     );
   });
 
-  it("has no evidence uploads and no revert API yet", async () => {
+  it("supports evidence and finds none before it is posted, with no revert API", async () => {
     const pr = env.forge.addPr("codeden/a");
     const details = port();
 
-    expect(details.evidenceSupported(P)).toBe(false);
+    expect(details.evidenceSupported(P)).toBe(true);
     expect(await details.evidence(P, pr.number, null)).toEqual({
       screenshots: false,
       testOutput: false,
@@ -469,11 +469,6 @@ describe("forge factory intake and projection", () => {
     expect(await details.revertMatches(P, { headSha: "revert-3", mergeSha: "merge-1" })).toBe(
       false,
     );
-  });
-
-  it("refuses to share the vision through a PR until phase D", async () => {
-    const error = await refusal(port().shareVision(P, ".codeden/VISION.md", "text"));
-    expect(error.forgeCode).toBe("forge_not_allowed");
   });
 });
 
@@ -520,45 +515,51 @@ describe("the factory's port per project kind", () => {
   });
 });
 
-describe("the evidence gate on a forge PR", () => {
-  it("skips the screenshot check and accepts test results from the PR description", () => {
-    const { outcome, check } = checksFor({
+describe("the evidence checks on a forge PR (phase D)", () => {
+  it("requires screenshots for UI changes, from evidence or not", () => {
+    const missing = checksFor({
       files: ["src/settings/panel.tsx", "src/settings/panel.ts", "src/settings/panel.test.ts"],
       evidence: false,
       testOutput: false,
-      evidenceSupported: false,
+      evidenceSupported: true,
     });
 
-    expect(check("ui_evidence")).toMatchObject({ state: "skipped" });
-    expect(check("ui_evidence")?.detail).toContain("not available on this forge yet");
-    expect(check("test_results")).toMatchObject({ state: "pass" });
-    expect(outcome).toBe("pass");
+    expect(missing.check("ui_evidence")).toMatchObject({ state: "fail" });
+    expect(missing.check("ui_evidence")?.detail).toContain("no screenshots were attached");
+    expect(missing.check("test_results")).toMatchObject({ state: "pass" });
+    expect(missing.outcome).toBe("fail");
+
+    const attached = checksFor({
+      files: ["src/settings/panel.tsx", "src/settings/panel.test.ts"],
+      evidence: true,
+      testOutput: false,
+      evidenceSupported: true,
+    });
+    expect(attached.check("ui_evidence")).toMatchObject({ state: "pass" });
+    expect(attached.outcome).toBe("pass");
   });
 
-  it("asks for a test results section instead of an attachment nobody can make", () => {
-    const { outcome, check } = checksFor({
+  it("accepts test results from the PR description or attached test output", () => {
+    const description = checksFor({
       files: ["src/order.ts"],
       body: "Fixes #3",
       evidence: false,
       testOutput: false,
-      evidenceSupported: false,
+      evidenceSupported: true,
     });
-
-    expect(check("test_results")).toMatchObject({ state: "fail" });
-    expect(check("test_results")?.detail).toBe(
-      "No test results: add a `## Test results` section to the PR",
+    expect(description.check("test_results")).toMatchObject({ state: "fail" });
+    expect(description.check("test_results")?.detail).toBe(
+      "No test results: add a `## Test results` section to the PR or attach the test output with attach_evidence",
     );
-    expect(outcome).toBe("fail");
-  });
 
-  it("still requires screenshots where attach_evidence works", () => {
-    const { check } = checksFor({
-      files: ["src/settings/panel.tsx"],
+    const attached = checksFor({
+      files: ["src/order.ts", "src/order.test.ts"],
+      body: "Fixes #3",
       evidence: false,
       testOutput: true,
       evidenceSupported: true,
     });
-
-    expect(check("ui_evidence")).toMatchObject({ state: "fail" });
+    expect(attached.check("test_results")).toMatchObject({ state: "pass" });
+    expect(attached.outcome).toBe("pass");
   });
 });

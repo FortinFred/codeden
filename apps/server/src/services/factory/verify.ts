@@ -235,7 +235,7 @@ async function gatherEvidence(
   const wantScreens = !revert && paths.some(isUiFile);
   const wantTests = !revert && codeFiles(paths).length > 0 && !hasTestResults(pr.body);
   if (!wantScreens && !wantTests) return { screenshots: null, testOutput: null };
-  // No `attach_evidence` on this forge yet (phase D): nothing to look up, nothing to wait for.
+  // No `attach_evidence` on this forge: nothing to look up, nothing to wait for.
   if (!evidenceSupported) return { screenshots: false, testOutput: false };
   let found = evidenceCache.get(headKey);
   if (!found || (wantScreens && !found.screenshots) || (wantTests && !found.testOutput)) {

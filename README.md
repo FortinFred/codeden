@@ -192,6 +192,7 @@ It's experimental. Start with the software factory on a test repository with aut
 | [Orchestration](docs/orchestration.md) | The orchestrator, project managers and agent sessions |
 | [Workbench](docs/workbench.md) | Changes, comments, undo, forks, hand-offs, files, terminal, browser and search |
 | [GitHub](docs/github.md) | Issues, pull requests, checks, reviews and evidence |
+| [Forgejo](docs/forgejo.md) | A self-hosted forge: connection, issues, PRs, evidence, vision and the factory |
 | [Automations](docs/automations.md) | Background jobs, schedules and writing your own |
 | [The software factory and the dark factory](docs/software-factory.md) | Modes, pipelines, trusted authors, the scout, the vision, limits and the stop button |
 | [How the factory loop works](docs/factory-loop.md) | What the factory does step by step |

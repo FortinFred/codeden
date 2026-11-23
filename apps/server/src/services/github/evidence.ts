@@ -25,6 +25,11 @@ export interface PublishedEvidence {
 
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"]);
 
+/** Whether a file name renders as an image in the evidence comment. */
+export function isImageName(name: string): boolean {
+  return IMAGE_EXTENSIONS.has(extname(name).toLowerCase());
+}
+
 /** Keep names safe for a git path and a URL: `[A-Za-z0-9._-]`, at most 100 characters. */
 export function safeFileName(name: string): string {
   const ext = extname(name)
@@ -143,7 +148,7 @@ export async function commitEvidence(
           name: e.fileName,
           path: e.path,
           url: evidenceUrl(repo, sha, e.path),
-          isImage: IMAGE_EXTENSIONS.has(extname(e.fileName).toLowerCase()),
+          isImage: isImageName(e.fileName),
           caption: e.caption,
         })),
       };
@@ -183,6 +188,8 @@ export function evidenceComment(opts: {
   summary?: string;
   testOutput?: string;
   sessionLabel: string;
+  /** One extra paragraph, e.g. where a forge committed files instead of attaching them. */
+  note?: string;
 }): string {
   const parts: string[] = [EVIDENCE_HEADING, ""];
   if (opts.summary) parts.push(opts.summary.trim(), "");
@@ -195,6 +202,7 @@ export function evidenceComment(opts: {
     }
     parts.push("");
   }
+  if (opts.note) parts.push(opts.note, "");
   if (opts.testOutput) {
     let output = opts.testOutput.replace(/```/g, "ʼʼʼ");
     if (output.length > TEST_OUTPUT_LIMIT) {

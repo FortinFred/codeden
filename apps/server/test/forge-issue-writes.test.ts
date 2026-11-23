@@ -155,7 +155,7 @@ describe("forge issue writes", () => {
     expect(env.githubRequests).toEqual([]);
   });
 
-  it("never calls GitHub, and keeps PR and evidence writes refused", async () => {
+  it("never calls GitHub, and serves evidence through the forge (phase D)", async () => {
     const issue = env.forge.addIssue({ title: "Bug" });
     await env.github.createIssue(P, { title: "New", body: "", labels: [] });
     await env.github.commentOnIssue(P, issue.number, "Hello");
@@ -175,13 +175,14 @@ describe("forge issue writes", () => {
       code: "not_a_github_project",
       status: 409,
     });
-    // `attachEvidence` refuses synchronously (it never reaches the API call).
-    try {
-      env.github.attachEvidence(session.id, { summary: "not for a forge yet" });
-      expect.unreachable("a forge project must not accept evidence");
-    } catch (error) {
-      expect(error).toMatchObject({ code: "not_a_github_project", status: 409 });
-    }
+    const evidence = await env.github.attachEvidence(session.id, {
+      target: { kind: "issue", number: issue.number },
+      summary: "A forge project takes evidence now",
+    });
+    expect(evidence.target).toEqual({ kind: "issue", number: issue.number });
+    expect(env.forge.issues.get(issue.number)?.comments.at(-1)?.body).toContain(
+      "A forge project takes evidence now",
+    );
     expect(env.githubRequests).toEqual([]);
   });
 });

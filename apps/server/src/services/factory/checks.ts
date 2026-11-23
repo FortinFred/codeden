@@ -45,9 +45,9 @@ export interface CheckInputs {
   /** Test output attached with `attach_evidence`; null when not looked up. */
   testOutput: boolean | null;
   /**
-   * Whether the project's forge can take evidence at all (`attach_evidence`). False on Forgejo
-   * until its evidence phase: the screenshot check is skipped and test results must come from
-   * the PR description, never from an attachment nobody can make.
+   * Whether the project's forge can take evidence at all (`attach_evidence`). When false (a
+   * forge without it), the screenshot check is skipped and test results must come from the PR
+   * description, never from an attachment nobody can make.
    */
   evidenceSupported?: boolean;
   /** Result of the configured audit command; null while not run (or not configured). */

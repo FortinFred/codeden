@@ -20,7 +20,9 @@ import {
   type TriageIssueResult,
 } from "@codeden/contracts";
 import type { EventStore } from "../../events/store";
+import type { ArtifactService } from "../artifacts";
 import { conflict, ForgeError } from "../errors";
+import type { AttachEvidenceInput, AttachEvidenceResult } from "../github/attach";
 import { withoutMarker } from "../github/issues";
 import type { CreatePullRequestInput, CreatePullRequestResult } from "../github/pull-requests";
 import type { GithubStore, IssueStateFilter } from "../github/store";
@@ -28,7 +30,9 @@ import type { ProjectService } from "../projects/project-service";
 import type { RunnerDeps } from "../runner-port";
 import type { SecretStore } from "../secrets";
 import type { SessionRepo } from "../sessions/repo";
+import { remoteWorkspaceFs } from "../workspace-fs/workspace-fs";
 import { FORGEJO_TOKEN_KEY, type ForgejoConnection } from "./connection";
+import { attachForgeEvidence } from "./evidence";
 import { ForgejoClient } from "./forgejo/client";
 import { ForgejoSync, type ForgeProject } from "./forgejo/sync";
 import * as issues from "./issues";
@@ -43,6 +47,10 @@ export interface ForgeServiceDeps extends RunnerDeps {
   projects: ProjectService;
   /** Sessions, for the PR writes' branch push and link. */
   repo: SessionRepo;
+  /** Evidence files: paths in a worktree, the temp folder, or the session's artifacts. */
+  artifacts: ArtifactService;
+  /** CodeDen's data directory: its credential files are never attached as evidence (§15). */
+  home?: string;
   /** Current settings, read on every call so a saved connection applies at once. */
   settings: () => Pick<Settings, "forges">;
   secrets: SecretStore;
@@ -66,7 +74,8 @@ export interface ForgeServiceDeps extends RunnerDeps {
  * `review.submitted` events as GitHub, so the existing projections, session PR links and read
  * responses need no provider branch. Issue writes (create, comment, label, triage) go through the
  * client and are projected at once, as are pull request writes (phase B2: push a session's branch,
- * open or update its PR). Evidence and merge writes stay GitHub-only until their phase.
+ * open or update its PR). Evidence is uploaded as issue/PR attachments, with a Contents-API branch
+ * as the fallback (phase D), and the vision is shared through a normal pull request.
  */
 export class ForgeService {
   readonly sync: ForgejoSync;
@@ -313,6 +322,29 @@ export class ForgeService {
     );
     this.soon(project.id);
     return result;
+  }
+
+  /* ------------------------------------------------------------ evidence */
+
+  /**
+   * `attach_evidence` on a forge project (`docs/forges.md` §5.8, phase D): upload each file as an
+   * issue/PR attachment and post the evidence comment, or commit a file the attachment API
+   * refuses to the normal `codeden/evidence` branch. The file and secret rules are the GitHub
+   * path's, applied before any upload.
+   */
+  attachEvidence(sessionId: string, input: AttachEvidenceInput): Promise<AttachEvidenceResult> {
+    const session = this.deps.repo.get(sessionId);
+    if (!session.projectId) throw conflict("This session has no project", "no_project");
+    const project = this.forgeProject(session.projectId);
+    return attachForgeEvidence({
+      client: this.clientForProject(project.id),
+      session,
+      artifacts: this.deps.artifacts,
+      input,
+      defaultBranch: project.forge.defaultBranch,
+      home: this.deps.home,
+      remote: remoteWorkspaceFs(this.deps, session),
+    });
   }
 
   /**

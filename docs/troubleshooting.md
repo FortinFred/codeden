@@ -256,6 +256,13 @@ Under **Supervised** every command asks, also ones that only read; that is what 
 - `gh auth status` must show you signed in. **Settings → GitHub** shows what CodeDen sees.
 - If you set `CODEDEN_GITHUB_SYNC=0`, polling is off.
 
+### Forgejo features are missing
+
+- The folder's `origin` must match the connection's web origin exactly, or the SSH host you set. **Settings → Forges → Forgejo** shows whether the token is stored and whether the instance answered.
+- The token needs `read:repository`, `write:repository`, `read:issue`, `write:issue` and `read:user`. A repository-only token connects but cannot read its own login, so trust falls back and the project says why.
+- A project connected before the connection was saved keeps its coordinates; use **Check again** on its page, or **Disconnect forge** and add it again.
+- See [Forgejo](forgejo.md) for the feature list and its limits (no draft PRs, no `state_reason`, agent-written reverts, no sandboxed push).
+
 ### An automation didn't run
 
 Check, in order: the master switch (**Settings → General → Automations**), the project's automations switch, the automation's own switch, whether the PM paused it, and its **Runs** tab. Skipped runs say why (`overlap`, `quiet_hours`, `daily_cap`, `factory_intake`, ...). A file automation with a YAML error is listed with the error on the Automations page.

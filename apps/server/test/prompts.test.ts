@@ -150,8 +150,9 @@ describe("agent system prompt", () => {
     );
     expect(text).toContain("Forge projects:");
     expect(text).toContain("never use `gh`");
-    expect(text).toContain("Evidence attachments are GitHub-only");
-    expect(text).not.toContain("`attach_evidence`");
+    expect(text).toContain("`attach_evidence` posts screenshots, files and test output");
+    expect(text).toContain("use it for UI screenshots and raw test output");
+    expect(text).not.toContain("Evidence attachments are GitHub-only");
   });
 
   it("states the permission level so the agent doesn't ask before acting", () => {
@@ -377,7 +378,7 @@ describe("triage texts", () => {
     expect(text).toContain("Ask with ask_user only if the change needs a protected area");
   });
 
-  it("tells a forge issue's agent to open the PR there, without GitHub-only evidence", () => {
+  it("tells a forge issue's agent to open the PR there, without gh", () => {
     const text = issueSessionPrompt(
       {
         number: 4,

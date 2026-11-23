@@ -28,7 +28,7 @@ import type {
 } from "@codeden/contracts";
 import { attachFiles, ciAvailable, type ForgejoFile, putFile, readFile } from "./contents";
 import type { ForgejoContext } from "./context";
-import { branchHead, branchHeadAt, commit, commitStatuses, compare } from "./git";
+import { branchHead, branchHeadAt, commit, commitStatuses, compare, deleteBranch } from "./git";
 import { ForgejoHttp, type ForgejoHttpOptions } from "./http";
 import { permission, repoInfo, version, viewerLogin } from "./identity";
 import {
@@ -94,9 +94,8 @@ export interface ForgejoClientOptions extends ForgejoHttpOptions {
 /**
  * A client for the Forgejo REST API v1 (`docs/forges.md` §5). It joins the configured web base
  * with `/api/v1`, sends `Authorization: token <token>`, paginates the endpoints capped at 50
- * rows, and maps Forgejo JSON onto the forge contracts. Pull request reads and the B2 writes
- * (create, update, draft refusal) are wired; merge and evidence calls wait for their phases, and
- * there is no Actions-run internals access.
+ * rows, and maps Forgejo JSON onto the forge contracts. Pull request reads and writes, attachments
+ * and the Contents API are wired, and there is no Actions-run internals access.
  *
  * The work is split by concern: identity, issues, pull requests, git reads and contents. This
  * facade keeps one object to hand to an adapter.
@@ -104,12 +103,17 @@ export interface ForgejoClientOptions extends ForgejoHttpOptions {
 export class ForgejoClient {
   readonly http: ForgejoHttp;
   readonly projectId: string;
+  /** The repository coordinates, for links that the API response does not carry. */
+  readonly owner: string;
+  readonly repo: string;
   private readonly context: ForgejoContext;
 
   constructor(options: ForgejoClientOptions) {
     const http = new ForgejoHttp(options);
     this.http = http;
     this.projectId = options.projectId ?? `${options.owner}/${options.repo}`;
+    this.owner = options.owner;
+    this.repo = options.repo;
     this.context = {
       http,
       projectId: this.projectId,
@@ -309,6 +313,11 @@ export class ForgejoClient {
   /** Always null: Forgejo has no `until` filter on commits. */
   branchHeadAt(branch: string, at: string): Promise<string | null> {
     return branchHeadAt(branch, at);
+  }
+
+  /** Delete a branch, e.g. a stale vision branch before it is reset. */
+  deleteBranch(branch: string): Promise<void> {
+    return deleteBranch(this.context, branch);
   }
 
   /** Compare two refs. */

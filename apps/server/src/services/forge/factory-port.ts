@@ -8,17 +8,20 @@ import type {
 } from "@codeden/contracts";
 import { conflict, errorMessage, ForgeError } from "../errors";
 import { prDiffKey } from "../factory/diff-key";
-import type {
-  Commenter,
-  CommitChecks,
-  FactoryGithub,
-  FactoryPr,
-  IssueAuthor,
-  MainHead,
-  MainSince,
-  PrEvidence,
+import {
+  type Commenter,
+  type CommitChecks,
+  type FactoryGithub,
+  type FactoryPr,
+  type IssueAuthor,
+  type MainHead,
+  type MainSince,
+  type PrEvidence,
+  VISION_BRANCH,
 } from "../factory/github-port";
+import { EVIDENCE_HEADING } from "../github/evidence";
 import type { ProjectService } from "../projects/project-service";
+import { forgeEvidenceComment } from "./evidence";
 import type { ForgeService } from "./service";
 
 /**
@@ -29,9 +32,10 @@ import type { ForgeService } from "./service";
  * PR with no statuses is `none` and never green. A merge is pinned to the reviewed head with
  * `head_commit_id`; a moved head or a refused style is the forge's refusal, which the queue
  * counts. `mergeable` is Forgejo's boolean, settled over two reads of the same head. Forgejo has
- * no `mergeable_state`, no `until` on commits, no revert API and no evidence uploads yet:
- * `mergeState` stays `unknown`, `mainHeadAt` is null, `revertMerge` is null (an agent writes the
- * revert) and `evidenceSupported` is false until phase D.
+ * no `mergeable_state`, no `until` on commits and no revert API: `mergeState` stays `unknown`,
+ * `mainHeadAt` is null and `revertMerge` is null (an agent writes the revert). Evidence is read
+ * from CodeDen's own evidence comment (attachments or the contents fallback, phase D), so the
+ * merge checks require screenshots again; the vision is shared through the Contents API.
  *
  * Trust follows §6.2: a login's live collaborator permission (`owner`, `write`) is write access;
  * a review's `official` flag stands in when permissions cannot be read; anything unknown is
@@ -198,20 +202,38 @@ export class ForgeFactoryPort implements FactoryGithub {
   }
 
   /**
-   * Evidence is phase D on Forgejo: there is no `attach_evidence` yet, so nothing is found and
-   * the checks don't wait for it (`evidenceSupported`).
+   * CodeDen's own evidence comment on the PR or its issue (`docs/forges.md` §5.8, §8.2): only a
+   * comment by the viewer counts, because anyone can comment on a public repository. An image
+   * link to the configured host (an attachment or the `codeden/evidence` branch) is a screenshot;
+   * the test-output block is test output.
    */
   async evidence(
-    _projectId: string,
-    _prNumber: number,
-    _issueNumber: number | null,
+    projectId: string,
+    prNumber: number,
+    issueNumber: number | null,
   ): Promise<PrEvidence> {
-    return { screenshots: false, testOutput: false };
+    const baseUrl = this.forgeRepo(projectId).baseUrl;
+    const viewer = (await this.viewerLogin(projectId))?.toLowerCase() ?? null;
+    const found: PrEvidence = { screenshots: false, testOutput: false };
+    if (!viewer) return found;
+    for (const number of [prNumber, ...(issueNumber ? [issueNumber] : [])]) {
+      const comments = await this.client(projectId).comments(number, { limit: 200 });
+      for (const comment of comments) {
+        const body = comment.body ?? "";
+        if (!body.startsWith(EVIDENCE_HEADING)) continue;
+        if (comment.author?.toLowerCase() !== viewer) continue;
+        const evidence = forgeEvidenceComment(body, baseUrl);
+        if (evidence.screenshots) found.screenshots = true;
+        if (evidence.testOutput) found.testOutput = true;
+      }
+      if (found.screenshots && found.testOutput) break;
+    }
+    return found;
   }
 
-  /** A forge PR cannot carry evidence until phase D: its checks don't require any. */
+  /** `attach_evidence` works on a forge PR: the merge checks require screenshots for UI work. */
   evidenceSupported(_projectId: string): boolean {
-    return false;
+    return true;
   }
 
   /**
@@ -322,19 +344,66 @@ export class ForgeFactoryPort implements FactoryGithub {
   }
 
   /**
-   * Sharing the vision through a pull request is phase D on Forgejo (the Contents API and a
-   * reset branch). The factory saves the vision in the main checkout either way
-   * (`FactoryService.putVision`), so this refuses with a reason instead of pretending.
+   * Commit the vision file through the Contents API to `codeden/vision` (from the default branch,
+   * or on top of its open PR), then open or update that PR (`docs/forges.md` §5.8, phase D).
+   * Null when the file already matches the branch's copy. A stale branch from a closed or merged
+   * vision PR is deleted and recreated from the default branch.
    */
   async shareVision(
-    _projectId: string,
-    _path: string,
-    _contents: string,
+    projectId: string,
+    path: string,
+    contents: string,
   ): Promise<GitHubPrRef | null> {
-    throw new ForgeError(
-      "forge_not_allowed",
-      "Sharing the vision through a pull request is not available on a forge project yet; the vision is saved in the main checkout.",
+    const repo = this.forgeRepo(projectId);
+    const client = this.client(projectId);
+    const open = (await client.listPulls({ state: "open", limit: 100 })).find(
+      (pr) => pr.headBranch === VISION_BRANCH,
     );
+    const parentRef = open ? VISION_BRANCH : repo.defaultBranch;
+    let current: { sha: string; contents: string } | null = null;
+    try {
+      current = await client.readFile(path, parentRef);
+    } catch (error) {
+      if (!(error instanceof ForgeError && error.forgeCode === "forge_not_found")) throw error;
+    }
+    const existing = current ? Buffer.from(current.contents, "base64").toString("utf8") : null;
+    if (existing === contents) {
+      return open ? { number: open.number, url: open.url, state: "open", title: open.title } : null;
+    }
+    const encoded = Buffer.from(contents, "utf8").toString("base64");
+    const message = "docs: update the project vision\n\nSaved from the CodeDen vision editor.";
+    if (open) {
+      await client.putFile({
+        path,
+        contents: encoded,
+        branch: VISION_BRANCH,
+        ...(current ? { sha: current.sha } : {}),
+        message,
+      });
+      this.deps.forge.soon(projectId);
+      return { number: open.number, url: open.url, state: "open", title: open.title };
+    }
+    // A stale branch from a merged or closed vision PR is reset onto the default branch.
+    if (await this.branchExists(projectId, VISION_BRANCH)) {
+      await client.deleteBranch(VISION_BRANCH);
+    }
+    await client.putFile({
+      path,
+      contents: encoded,
+      branch: repo.defaultBranch,
+      newBranch: VISION_BRANCH,
+      message,
+    });
+    const title = "Update the project vision";
+    const pr = await client.createPull({
+      head: VISION_BRANCH,
+      base: repo.defaultBranch,
+      title,
+      draft: false,
+      body: `Commits \`${path}\`, saved from the CodeDen vision editor. The factory reads the vision from the local checkout right away; merging this shares it with agent worktrees, which start from \`${repo.defaultBranch}\`.`,
+    });
+    this.deps.forge.soon(projectId);
+    return { number: pr.number, url: pr.url, state: "open", title };
   }
 
   /* ------------------------------------------------------------ internals */
@@ -344,10 +413,27 @@ export class ForgeFactoryPort implements FactoryGithub {
   }
 
   private defaultBranch(projectId: string): string {
+    return this.forgeRepo(projectId).defaultBranch;
+  }
+
+  /** The project's forge coordinates; a non-forge project cannot reach this port. */
+  private forgeRepo(projectId: string) {
     const project = this.deps.projects.get(projectId);
-    return project.kind === "forge"
-      ? project.forge.defaultBranch
-      : (project.defaultBranch ?? "main");
+    if (project.kind !== "forge") {
+      throw conflict(`${project.name} is not a forge project`, "not_a_forge_project");
+    }
+    return project.forge;
+  }
+
+  /** Whether a branch exists, for the stale vision branch reset. */
+  private async branchExists(projectId: string, branch: string): Promise<boolean> {
+    try {
+      await this.client(projectId).branchHead(branch);
+      return true;
+    } catch (error) {
+      if (error instanceof ForgeError && error.forgeCode === "forge_not_found") return false;
+      throw error;
+    }
   }
 
   /** A login's live permission as write access; anything unreadable is `none`, never trusted. */

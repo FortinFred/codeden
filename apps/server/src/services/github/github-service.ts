@@ -81,7 +81,8 @@ export interface GithubServiceDeps extends RunnerDeps {
  * issue writes: create, comment, label, triage, and opening a session's PR) answer for a
  * `kind: "forge"` project through `ForgeService` (`docs/forges.md` phases A2, B1 and B2), so the
  * existing `/api/projects/:id/github/*` routes and MCP tools serve both with one behaviour.
- * Merge, evidence and vision writes still refuse a forge project (their phases). Every method that needs
+ * Evidence is served for a forge project too (attachments, phase D); merge and vision go through
+ * the factory's forge port. Every method that needs
  * GitHub takes a project id and fails with `409 not_a_github_project` for local-only and forge
  * projects, and `409 github_not_connected` without a token; list reads never fail for those
  * reasons (they return the projection and the state).
@@ -365,9 +366,14 @@ export class GithubService {
     return result;
   }
 
-  /** `attach_evidence`: files to the evidence branch plus a comment on the PR or issue. */
+  /**
+   * `attach_evidence`: on GitHub, files to the evidence branch plus a comment on the PR or
+   * issue; on a forge project, attachments (or the contents fallback) plus the same comment.
+   */
   attachEvidence(sessionId: string, input: AttachEvidenceInput): Promise<AttachEvidenceResult> {
     const session = this.deps.repo.get(sessionId);
+    const forge = this.forgeFor(session.projectId);
+    if (forge) return forge.attachEvidence(sessionId, input);
     return attachEvidence(
       this.client,
       this.deps.artifacts,

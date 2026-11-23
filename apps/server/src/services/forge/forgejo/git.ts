@@ -95,6 +95,14 @@ export function branchHeadAt(_branch: string, _at: string): Promise<string | nul
   return Promise.resolve(null);
 }
 
+/** Delete a branch (a stale `coden/vision` branch is reset this way, §5.8). */
+export async function deleteBranch(context: ForgejoContext, branch: string): Promise<void> {
+  await context.http.request(`${repoPath(context)}/branches/${seg(branch)}`, {
+    method: "DELETE",
+    as: "none",
+  });
+}
+
 /** Compare two refs; `behind` is Forgejo's `total_commits` and files are paths only. */
 export async function compare(
   context: ForgejoContext,

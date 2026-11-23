@@ -145,6 +145,7 @@ A project can override these for its own new sessions: open the project and its 
 
 - [Workbench](workbench.md): diffs, checkpoints, terminal and browser.
 - [GitHub](github.md): issues, PRs and evidence.
+- [Forgejo](forgejo.md): a self-hosted forge with issues, PRs, evidence and the factory.
 - [Automations](automations.md): put routine work on a schedule.
 - [Phones, tablets and network access](remote-access.md): open CodeDen from your phone.
 - [Troubleshooting](troubleshooting.md) if anything doesn't start.

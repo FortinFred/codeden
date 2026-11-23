@@ -257,6 +257,7 @@ export function createServices(opts: ServicesOptions): AppServices {
   });
   // The shared projection store is stateless; one instance per service keeps the wiring plain.
   const sessionRepo = new SessionRepo(opts.db, opts.store);
+  const artifacts = new ArtifactService(opts.db, opts.store, opts.paths.artifacts);
   const forge = new ForgeService({
     store: opts.store,
     data: new GithubStore(opts.db),
@@ -264,6 +265,8 @@ export function createServices(opts: ServicesOptions): AppServices {
     repo: sessionRepo,
     runner: opts.runner,
     runners,
+    artifacts,
+    home: opts.paths.home,
     settings: () => opts.settings.get(),
     secrets: opts.secrets,
     connection: forgejo,
@@ -273,7 +276,6 @@ export function createServices(opts: ServicesOptions): AppServices {
     tickMs: opts.forgejo?.tickMs,
     log: opts.log,
   });
-  const artifacts = new ArtifactService(opts.db, opts.store, opts.paths.artifacts);
   const outbox = new Outbox(opts.db, opts.store);
   const mcpTokens = new McpTokenStore(opts.db);
   const questions = new QuestionBroker({

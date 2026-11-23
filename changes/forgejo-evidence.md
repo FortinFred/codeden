@@ -1,0 +1,5 @@
+---
+section: added
+---
+
+- **Evidence on a Forgejo pull request, and a vision you can share.** `attach_evidence` now works on a forge project: screenshots, files and test output are posted as an issue or pull request attachment comment, with the same heading, inline images, captions and collapsed test output as on GitHub, and the factory requires screenshots for UI changes again and reads only CodeDen's own evidence comments. When the instance disables attachments or a file is too large, the file is committed to a normal `codeden/evidence` branch through the Contents API and linked from there. Secrets files are refused before anything is uploaded, and CodeDen's own viewer still shows a private forge image as a link. The vision editor's **Review & save** commits the file to a `codeden/vision` pull request (updating an open one, resetting a stale branch), so agent worktrees get the vision too. Draft pull requests, close reasons, agent-written reverts and sandboxed pushes stay as the guide describes; see [docs/forgejo.md](../docs/forgejo.md).

@@ -178,8 +178,8 @@ export interface FactoryGithub {
    */
   actionsAvailable(projectId: string): Promise<boolean | null>;
   /**
-   * Whether `attach_evidence` can put evidence on a PR of this project. False on Forgejo until
-   * its evidence phase: the merge checks then don't require screenshots or wait for test output.
+   * Whether `attach_evidence` can put evidence on a PR of this project. When false (a forge
+   * without it), the merge checks don't require screenshots or wait for test output.
    */
   evidenceSupported(projectId: string): boolean;
   /**

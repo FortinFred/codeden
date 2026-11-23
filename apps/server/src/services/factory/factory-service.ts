@@ -330,14 +330,14 @@ export class FactoryService {
   }
 
   /**
-   * Save the vision in the main checkout (the factory reads it from there), then, in a GitHub
-   * project, commit it through a small PR (`codeden/vision`) so agent worktrees get it too.
-   * A failed commit keeps the local save and reports `shareError`.
+   * Save the vision in the main checkout (the factory reads it from there), then, in a GitHub or
+   * connected forge project, commit it through a small PR (`codeden/vision`) so agent worktrees
+   * get it too. A failed commit keeps the local save and reports `shareError`.
    */
   async putVision(projectId: string, contents: string): Promise<VisionResponse> {
     const project = this.deps.projects.get(projectId);
     const saved = writeVision(project, contents);
-    if (project.kind !== "github" || !this.ctx.github.isForgeProject(projectId)) return saved;
+    if (!this.ctx.github.isForgeProject(projectId)) return saved;
     try {
       const path = project.visionPath.replaceAll("\\", "/").replace(/^\.\//, "");
       const pr = await this.ctx.github.shareVision(projectId, path, saved.contents);

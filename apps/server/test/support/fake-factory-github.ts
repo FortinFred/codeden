@@ -107,7 +107,7 @@ export class FakeFactoryGithub implements FactoryGithub {
   ciAfterUpdate: ChecksState = "pending";
   /** What `actionsAvailable` answers. */
   actions: boolean | null = true;
-  /** Whether `attach_evidence` can carry evidence (false for a forge project until phase D). */
+  /** Whether `attach_evidence` can carry evidence (false for a forge without it). */
   evidenceAvailable = true;
   /** Issue authors' relation to the repository by issue number (default `none`). */
   associations = new Map<number, GithubAuthorAssociation>();

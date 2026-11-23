@@ -45,6 +45,7 @@ export interface ForgeEnv {
   service: ForgeService;
   github: GithubService;
   repo: SessionRepo;
+  artifacts: ArtifactService;
   secrets: MemorySecretStore;
   settings: () => Settings;
   /** Everything the forge services logged (an unknown label, a sync failure). */
@@ -135,12 +136,16 @@ export function createForgeEnv(): ForgeEnv {
       return {};
     }) as RunnerPort["request"],
   };
+  mkdirSync(join(dir, "artifacts"));
+  const artifacts = new ArtifactService(db.db, store, join(dir, "artifacts"));
   const service = new ForgeService({
     store,
     data,
     projects,
     repo,
     runner,
+    artifacts,
+    home: dir,
     settings: () => settings,
     secrets,
     connection,
@@ -148,8 +153,6 @@ export function createForgeEnv(): ForgeEnv {
     now: () => FORGE_TEST_NOW,
     log,
   });
-  mkdirSync(join(dir, "artifacts"));
-  const artifacts = new ArtifactService(db.db, store, join(dir, "artifacts"));
   const inbox = new InboxService(db.db, store, () => async () => {});
   const githubRequests: string[] = [];
   const forbiddenFetch: typeof fetch = async (input) => {
@@ -240,6 +243,7 @@ export function createForgeEnv(): ForgeEnv {
     service,
     github,
     repo,
+    artifacts,
     secrets,
     settings: () => settings,
     logs,
