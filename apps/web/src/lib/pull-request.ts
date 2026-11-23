@@ -19,17 +19,17 @@ export function isActivePr(pr: GitHubPrRef | null | undefined): pr is GitHubPrRe
 
 /**
  * Whether the UI offers to ask this session's agent for a pull request: an agent session the user
- * started in a GitHub project, working on its own branch, that can still push (not read-only, not
- * archived) and has no open PR yet. Sessions CodeDen starts (PM, automation, factory) open their
- * own pull requests when their work is done. `pr` is the session's PR as GitHub reports it now,
- * when known; it defaults to the one recorded on the session.
+ * started in a GitHub or forge project, working on its own branch, that can still push (not
+ * read-only, not archived) and has no open PR yet. Sessions CodeDen starts (PM, automation,
+ * factory) open their own pull requests when their work is done. `pr` is the session's PR as the
+ * forge reports it now, when known; it defaults to the one recorded on the session.
  */
 export function canAskForPullRequest(
   session: Session | null | undefined,
   project: Project | null | undefined,
   pr: GitHubPrRef | null | undefined = session?.pr,
 ): boolean {
-  if (!session || project?.kind !== "github") return false;
+  if (!session || (project?.kind !== "github" && project?.kind !== "forge")) return false;
   if (session.role !== "agent" || session.startedBy.kind !== "user") return false;
   if (session.autonomy === "read_only" || session.archivedAt) return false;
   if (!session.worktreePath || !session.branch || session.branch === session.baseBranch) {
