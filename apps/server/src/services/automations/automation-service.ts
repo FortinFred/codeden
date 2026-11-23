@@ -173,7 +173,7 @@ export class AutomationService implements AutomationPort {
   isEnabled(automation: Automation, project: Project): boolean {
     if (!this.deps.settings.get().automations.enabled || project.archivedAt) return false;
     if (!this.schedules.projectSettings(project.id).enabled) return false;
-    if (automation.action.type === "triage" && project.kind !== "github") return false;
+    if (automation.action.type === "triage" && project.kind === "local") return false;
     return this.switchedOn(automation, project);
   }
 

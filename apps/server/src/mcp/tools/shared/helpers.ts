@@ -33,8 +33,9 @@ export function githubProject(services: AppServices, projectId: string): Project
 }
 
 /**
- * A project with an issue and PR flow: GitHub, or a forge project whose issues and PRs sync
- * read-only in phase A2 (`docs/forges.md` §9). Reads only; writes call `githubProject`.
+ * A project with an issue flow: GitHub, or a forge project whose issues and PRs sync and whose
+ * issues take writes through the shared seam (`docs/forges.md` phases A2 and B1). PR and evidence
+ * tools still call `githubProject`.
  */
 export function issueTrackingProject(services: AppServices, projectId: string): Project {
   const project = projectFor(services, projectId);

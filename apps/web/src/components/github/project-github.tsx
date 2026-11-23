@@ -169,7 +169,7 @@ export function ProjectGithub({ project }: { project: Project }) {
           <span
             className="rounded-full border border-border px-2 py-px text-3xs text-muted-foreground"
             data-testid="forge-read-only"
-            title={`Issues and pull requests are read from ${forge}. Comments, labels, triage, pull requests and merges work only on GitHub until a later phase.`}
+            title={`Issues and pull requests are read from ${forge}. This panel is read-only; the PM and agents can comment, label and triage issues on ${forge}, and pull requests and merges stay GitHub-only until a later phase.`}
           >
             {forge} · read-only
           </span>

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineTool } from "../../define";
-import { inGithubProject, inIssueTrackingProject } from "../github/available";
-import { githubProject, issueTrackingProject } from "../shared/helpers";
+import { inIssueTrackingProject } from "../github/available";
+import { issueTrackingProject } from "../shared/helpers";
 
 /** `list_issues` (§8.3): read-only, so it is listed for a forge project too (phase A2). */
 export const listIssues = defineTool({
@@ -37,14 +37,17 @@ export const getIssue = defineTool({
     services.orchestration.github.getIssue(issueTrackingProject(services, projectId), number),
 });
 
-/** `triage_issue` (§8.3, §10 issue triage): labels, comment, accept or decline. */
+/**
+ * `triage_issue` (§8.3, §10 issue triage): labels, comment, accept or decline. An issue write
+ * through the project's forge (phase B1), so it is listed for a forge project too.
+ */
 export const triageIssue = defineTool({
   name: "triage_issue",
   description:
-    "Record a triage decision on an issue: ready, needs_info, unsafe, out_of_scope or duplicate, with labels to add or remove and an optional comment (close: true for out of scope or duplicates). Follow the project's policy. When you can't decide, choose needs_info (ask the author the specific questions in the comment) or unsafe (it needs a human decision); don't wait on the user.",
+    "Record a triage decision on an issue in the project's forge: ready, needs_info, unsafe, out_of_scope or duplicate, with labels to add or remove and an optional comment (close: true for out of scope or duplicates). Follow the project's policy. When you can't decide, choose needs_info (ask the author the specific questions in the comment) or unsafe (it needs a human decision); don't wait on the user.",
   roles: ["pm"],
   scope: "project",
-  isAvailable: inGithubProject,
+  isAvailable: inIssueTrackingProject,
   input: z.object({
     number: z.int().positive(),
     decision: z.enum(["ready", "needs_info", "unsafe", "out_of_scope", "duplicate"]),
@@ -54,22 +57,26 @@ export const triageIssue = defineTool({
     close: z.boolean().optional(),
   }),
   handler: async ({ number, ...triage }, { services, projectId }) =>
-    services.orchestration.github.triageIssue(githubProject(services, projectId), number, triage),
+    services.orchestration.github.triageIssue(
+      issueTrackingProject(services, projectId),
+      number,
+      triage,
+    ),
 });
 
-/** `create_issue` (§8.3). */
+/** `create_issue` (§8.3): an issue write through the project's forge (phase B1). */
 export const createIssue = defineTool({
   name: "create_issue",
   description:
-    "Create a GitHub issue in this project (for planned work: include a work key and acceptance criteria in the body).",
+    "Create an issue in the project's forge (for planned work: include a work key and acceptance criteria in the body).",
   roles: ["pm"],
   scope: "project",
-  isAvailable: inGithubProject,
+  isAvailable: inIssueTrackingProject,
   input: z.object({
     title: z.string().trim().min(1).max(256),
     body: z.string().max(60_000),
     labels: z.array(z.string()).optional(),
   }),
   handler: async (issue, { services, projectId }) =>
-    services.orchestration.github.createIssue(githubProject(services, projectId), issue),
+    services.orchestration.github.createIssue(issueTrackingProject(services, projectId), issue),
 });

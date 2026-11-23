@@ -104,6 +104,13 @@ export interface FakeForgejoStatus {
   createdAt?: string;
 }
 
+/** A repository label; create-issue takes IDs, add/remove take names (§5.4). */
+export interface FakeForgejoLabel {
+  id: number;
+  name: string;
+  color: string;
+}
+
 /** One issue or pull request the fake holds (a PR carries `pullRequest: true` and its fields). */
 export interface FakeForgejoIssue {
   number: number;
@@ -139,8 +146,9 @@ export interface FakeForgejoIssue {
 
 /**
  * An in-memory Forgejo behind `fetch`: the issues listing with its `state`/`since` filters,
- * pull requests, comments, reviews, commit statuses and branch protection. Every request is
- * recorded, and every write is refused with 405, so a test can assert the sync is read-only.
+ * pull requests, comments, reviews, commit statuses, branch protection and the issue writes of
+ * phase B1 (create, comment, label add/remove, close). Every request is recorded; the sync's own
+ * suite asserts that no sync or read path ever sends a write.
  */
 export class FakeForgejo {
   readonly owner = "acme";
@@ -148,6 +156,19 @@ export class FakeForgejo {
   /** A loopback base URL, accepted by the client's validation; no server listens on it. */
   readonly baseUrl = "http://127.0.0.1:3000";
   readonly issues = new Map<number, FakeForgejoIssue>();
+  /**
+   * The repository's labels (`GET /labels`). Create-issue labels are IDs, resolved from these;
+   * add/remove use names, and a name that is not here is silently ignored, as Forgejo does.
+   */
+  readonly labels = new Map<string, FakeForgejoLabel>(
+    (
+      [
+        { id: 1, name: "bug", color: "d73a4a" },
+        { id: 2, name: "enhancement", color: "a2eeef" },
+        { id: 3, name: "needs info", color: "d4c5f9" },
+      ] satisfies FakeForgejoLabel[]
+    ).map((label) => [label.name, label]),
+  );
   readonly requests: FakeForgeRequest[] = [];
   readonly token = "forge-token";
   /** The `/user` login; `null` makes `/user` answer 403 (a repository-only token). */
@@ -158,6 +179,7 @@ export class FakeForgejo {
   private clock = Date.parse("2026-11-01T00:00:00Z");
   private nextNumber = 1;
   private nextId = 5000;
+  private nextLabelId = 100;
 
   /** A monotonically increasing timestamp (seconds apart). */
   tick(): string {
@@ -288,13 +310,14 @@ export class FakeForgejo {
     if (this.rateLimited) {
       return answer(429, { message: "too many requests" }, { "retry-after": "30" });
     }
-    if (method !== "GET") return answer(405, { message: "the fake forge is read-only" });
-    return this.route(url.pathname, url.searchParams, answer);
+    return this.route(url.pathname, url.searchParams, method, body, answer);
   };
 
   private route(
     path: string,
     query: URLSearchParams,
+    method: string,
+    body: string,
     answer: (status: number, data: unknown, extra?: Record<string, string>) => Response,
   ): Response {
     if (path === "/api/v1/version") return answer(200, { version: "17.0.2" });
@@ -308,14 +331,37 @@ export class FakeForgejo {
     const rest = path.slice(prefix.length);
 
     if (rest === "") return answer(200, this.repository());
-    if (rest === "/issues") return this.listIssues(query, answer);
+    if (rest === "/labels") return this.listLabels(query, answer);
+    if (rest === "/issues") {
+      if (method === "POST") return this.createIssue(bodyOf(body), answer);
+      return this.listIssues(query, answer);
+    }
     let match = rest.match(/^\/issues\/(\d+)$/);
     if (match) {
-      const issue = this.issues.get(Number(match[1]));
+      const number = Number(match[1]);
+      if (method === "PATCH") return this.editIssue(number, bodyOf(body), answer);
+      const issue = this.issues.get(number);
       return issue ? answer(200, this.issueRow(issue)) : answer(404, notFound());
     }
     match = rest.match(/^\/issues\/(\d+)\/comments$/);
-    if (match) return this.listComments(Number(match[1]), query, answer);
+    if (match) {
+      return method === "POST"
+        ? this.createComment(Number(match[1]), bodyOf(body), answer)
+        : this.listComments(Number(match[1]), query, answer);
+    }
+    match = rest.match(/^\/issues\/(\d+)\/labels$/);
+    if (match) {
+      return method === "POST"
+        ? this.addLabels(Number(match[1]), bodyOf(body), answer)
+        : answer(405, { message: "method not allowed" });
+    }
+    match = rest.match(/^\/issues\/(\d+)\/labels\/(.+)$/);
+    if (match) {
+      const name = decodeURIComponent(match[2] ?? "");
+      return method === "DELETE"
+        ? this.removeLabel(Number(match[1]), name, answer)
+        : answer(405, { message: "method not allowed" });
+    }
     match = rest.match(/^\/pulls\/(\d+)$/);
     if (match) {
       const issue = this.issues.get(Number(match[1]));
@@ -381,6 +427,108 @@ export class FakeForgejo {
     );
   }
 
+  /** `POST /issues`: labels are IDs here, so unknown IDs are dropped (Forgejo's own rule). */
+  private createIssue(
+    body: Record<string, unknown>,
+    answer: (status: number, data: unknown, extra?: Record<string, string>) => Response,
+  ): Response {
+    const ids = Array.isArray(body.labels) ? (body.labels as number[]) : [];
+    const issue = this.addIssue({
+      title: String(body.title ?? ""),
+      body: String(body.body ?? ""),
+      labels: ids
+        .map((id) => [...this.labels.values()].find((label) => label.id === id)?.name)
+        .filter((name): name is string => name !== undefined),
+      author: this.viewer ?? "codeden-bot",
+    });
+    return answer(201, this.issueRow(issue));
+  }
+
+  /** `PATCH /issues/{n}`: a close or reopen; Forgejo has no `state_reason` to record. */
+  private editIssue(
+    number: number,
+    body: Record<string, unknown>,
+    answer: (status: number, data: unknown, extra?: Record<string, string>) => Response,
+  ): Response {
+    const issue = this.issues.get(number);
+    if (!issue) return answer(404, notFound());
+    const closing = body.state === "closed" && issue.state !== "closed";
+    this.touch(number, (row) => {
+      if (body.state === "closed" || body.state === "open") row.state = body.state;
+      if (typeof body.title === "string") row.title = body.title;
+      if (typeof body.body === "string") row.body = body.body;
+      if (closing) row.closedAt = this.tick();
+      if (body.state === "open") row.closedAt = null;
+    });
+    return answer(200, this.issueRow(issue));
+  }
+
+  /** `POST /issues/{n}/comments`: the body is stored as sent, marker included. */
+  private createComment(
+    number: number,
+    body: Record<string, unknown>,
+    answer: (status: number, data: unknown, extra?: Record<string, string>) => Response,
+  ): Response {
+    const issue = this.issues.get(number);
+    if (!issue) return answer(404, notFound());
+    const comment = this.addComment(number, String(body.body ?? ""), this.viewer ?? "codeden-bot");
+    return answer(201, this.commentRow(number, comment));
+  }
+
+  /** `POST /issues/{n}/labels`: names, of which Forgejo silently ignores the unknown ones. */
+  private addLabels(
+    number: number,
+    body: Record<string, unknown>,
+    answer: (status: number, data: unknown, extra?: Record<string, string>) => Response,
+  ): Response {
+    const issue = this.issues.get(number);
+    if (!issue) return answer(404, notFound());
+    const names = Array.isArray(body.labels) ? (body.labels as string[]) : [];
+    this.touch(number, (row) => {
+      for (const name of names) {
+        if (this.labels.has(name) && !row.labels.includes(name)) row.labels.push(name);
+      }
+    });
+    return answer(200, this.issueRow(issue).labels);
+  }
+
+  /** `DELETE /issues/{n}/labels/{name}`: 404 when the issue doesn't carry it, as Forgejo does. */
+  private removeLabel(
+    number: number,
+    name: string,
+    answer: (status: number, data: unknown, extra?: Record<string, string>) => Response,
+  ): Response {
+    const issue = this.issues.get(number);
+    if (!issue) return answer(404, notFound());
+    if (!issue.labels.includes(name)) return answer(404, notFound());
+    this.touch(number, (row) => {
+      row.labels = row.labels.filter((label) => label !== name);
+    });
+    return answer(200, this.issueRow(issue).labels);
+  }
+
+  /** `GET /labels`, paginated like every listing. */
+  private listLabels(
+    query: URLSearchParams,
+    answer: (status: number, data: unknown, extra?: Record<string, string>) => Response,
+  ): Response {
+    const rows = [...this.labels.values()];
+    const page = Number(query.get("page") ?? "1");
+    const limit = Number(query.get("limit") ?? "50");
+    return answer(200, rows.slice((page - 1) * limit, page * limit), {
+      "x-total-count": String(rows.length),
+    });
+  }
+
+  /** A label by name, registering one a test put on an issue without adding it to the repo. */
+  private labelOf(name: string): FakeForgejoLabel {
+    const found = this.labels.get(name);
+    if (found) return found;
+    const label = { id: this.nextLabelId++, name, color: "ededed" };
+    this.labels.set(name, label);
+    return label;
+  }
+
   private listComments(
     number: number,
     query: URLSearchParams,
@@ -394,16 +542,20 @@ export class FakeForgejo {
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     return answer(
       200,
-      rows.map((comment) => ({
-        id: comment.id,
-        body: comment.body,
-        user: { login: comment.author },
-        created_at: comment.createdAt,
-        updated_at: comment.createdAt,
-        html_url: `${this.baseUrl}/${this.owner}/${this.repo}/issues/${number}#issuecomment-${comment.id}`,
-      })),
+      rows.map((comment) => this.commentRow(number, comment)),
       { "x-total-count": String(rows.length) },
     );
+  }
+
+  private commentRow(number: number, comment: FakeForgejoComment) {
+    return {
+      id: comment.id,
+      body: comment.body,
+      user: { login: comment.author },
+      created_at: comment.createdAt,
+      updated_at: comment.createdAt,
+      html_url: `${this.baseUrl}/${this.owner}/${this.repo}/issues/${number}#issuecomment-${comment.id}`,
+    };
   }
 
   private branch(
@@ -444,7 +596,7 @@ export class FakeForgejo {
       body: issue.body,
       state: issue.state,
       html_url: `${this.baseUrl}/${this.owner}/${this.repo}/issues/${issue.number}`,
-      labels: issue.labels.map((name, index) => ({ id: index + 1, name })),
+      labels: issue.labels.map((name) => this.labelOf(name)),
       user: { login: issue.author },
       comments: issue.comments.length,
       created_at: issue.createdAt,
@@ -538,6 +690,17 @@ function combinedState(statuses: FakeForgejoStatus[]) {
 
 function notFound() {
   return { message: "not found" };
+}
+
+/** A write's request body as an object (an empty or unparsable body is `{}`). */
+function bodyOf(body: string): Record<string, unknown> {
+  if (!body.trim()) return {};
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    return parsed !== null && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
 }
 
 function readBody(incoming: IncomingMessage): Promise<string> {

@@ -77,13 +77,14 @@ export interface GithubServiceDeps extends RunnerDeps {
 
 /**
  * GitHub for CodeDen (§9): connection state, issue and PR sync, and the operations agents, PMs
- * and the UI share. The shared read paths (issue and PR lists, one issue, one PR, a session's
- * PR) answer for a `kind: "forge"` project through `ForgeService` (`docs/forges.md` phase A2),
- * so the existing `/api/projects/:id/github/*` routes serve both with one response shape; GitHub
- * writes still refuse a forge project. Every method that needs GitHub takes a project id and
- * fails with `409 not_a_github_project` for local-only and forge projects, and
- * `409 github_not_connected` without a token; list reads never fail for those reasons (they
- * return the projection and the state).
+ * and the UI share. The shared paths (issue and PR lists, one issue, one PR, a session's PR, and
+ * the issue writes: create, comment, label, triage) answer for a `kind: "forge"` project through
+ * `ForgeService` (`docs/forges.md` phases A2 and B1), so the existing
+ * `/api/projects/:id/github/*` routes and MCP tools serve both with one behaviour. PR, merge,
+ * evidence and vision writes still refuse a forge project (phase B2). Every method that needs
+ * GitHub takes a project id and fails with `409 not_a_github_project` for local-only and forge
+ * projects, and `409 github_not_connected` without a token; list reads never fail for those
+ * reasons (they return the projection and the state).
  */
 export class GithubService {
   readonly auth: GithubAuth;
@@ -230,10 +231,14 @@ export class GithubService {
     number: number,
     req: TriageIssueRequest,
   ): Promise<TriageIssueResult> {
+    const forge = this.forgeFor(projectId);
+    if (forge) return forge.triageIssue(projectId, number, req);
     return issues.triageIssue(this.issueDeps(), projectId, this.githubRepo(projectId), number, req);
   }
 
   createIssue(projectId: string, req: CreateGithubIssueRequest): Promise<GithubIssue> {
+    const forge = this.forgeFor(projectId);
+    if (forge) return forge.createIssue(projectId, req);
     return issues.createIssue(this.issueDeps(), projectId, this.githubRepo(projectId), req);
   }
 
@@ -242,10 +247,14 @@ export class GithubService {
     number: number,
     body: string,
   ): Promise<{ id: number; url: string }> {
+    const forge = this.forgeFor(projectId);
+    if (forge) return forge.commentOnIssue(projectId, number, body);
     return issues.commentOnIssue(this.issueDeps(), this.githubRepo(projectId), number, body);
   }
 
   labelIssue(projectId: string, number: number, req: GithubLabelRequest): Promise<GithubIssue> {
+    const forge = this.forgeFor(projectId);
+    if (forge) return forge.labelIssue(projectId, number, req);
     return issues.labelIssue(this.issueDeps(), projectId, this.githubRepo(projectId), number, req);
   }
 

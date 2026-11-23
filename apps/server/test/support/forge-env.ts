@@ -9,7 +9,7 @@ import type {
   Session,
   Settings,
 } from "@codeden/contracts";
-import { Settings as SettingsSchema } from "@codeden/contracts";
+import { FactoryLimits, Settings as SettingsSchema } from "@codeden/contracts";
 import { type Database, openDatabase } from "../../src/db/client";
 import { EventStore } from "../../src/events/store";
 import { ArtifactService } from "../../src/services/artifacts";
@@ -47,6 +47,10 @@ export interface ForgeEnv {
   repo: SessionRepo;
   secrets: MemorySecretStore;
   settings: () => Settings;
+  /** Everything the forge services logged (an unknown label, a sync failure). */
+  logs: string[];
+  /** The inbox, for tests that drive triage decisions. */
+  inbox: InboxService;
   /** Requests a GitHub call made; a forge project must leave this empty. */
   githubRequests: string[];
   forgeProject: Project;
@@ -98,6 +102,8 @@ export function createForgeEnv(): ForgeEnv {
       }),
   });
   const data = new GithubStore(db.db);
+  const logs: string[] = [];
+  const log = (message: string) => logs.push(message);
   const service = new ForgeService({
     store,
     data,
@@ -107,6 +113,7 @@ export function createForgeEnv(): ForgeEnv {
     connection,
     fetch: forge.fetch,
     now: () => FORGE_TEST_NOW,
+    log,
   });
   const repo = new SessionRepo(db.db, store);
   mkdirSync(join(dir, "artifacts"));
@@ -150,7 +157,7 @@ export function createForgeEnv(): ForgeEnv {
     autonomy: null,
     autonomyMode: "assisted" as const,
     visionPath: ".codeden/VISION.md",
-    factoryLimits: {} as Project["factoryLimits"],
+    factoryLimits: FactoryLimits.parse({}),
     killSwitch: false,
     timezone: null,
     createdAt: ts,
@@ -214,6 +221,8 @@ export function createForgeEnv(): ForgeEnv {
     repo,
     secrets,
     settings: () => settings,
+    logs,
+    inbox,
     githubRequests,
     forgeProject,
     githubProject,

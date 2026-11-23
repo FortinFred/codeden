@@ -7,7 +7,6 @@ trigger:
 action: triage
 workKey: "triage:{{issue.number}}"
 starter: true
-requiresGithub: true
 policy:
   comment: true
   closeRejected: false
