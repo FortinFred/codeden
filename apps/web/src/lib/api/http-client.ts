@@ -197,6 +197,9 @@ export function createHttpClient(origin: string, opts: HttpClientOptions = {}): 
     disconnectForge: (id) =>
       post(`/projects/${enc(id)}/disconnect-forge`, {}, (v) => DisconnectForgeResponse.parse(v)),
     forges: httpForgesApi(http),
+    async archiveProject(id) {
+      await call("DELETE", `/projects/${enc(id)}`);
+    },
     automations: httpAutomationsApi(http),
     factory: httpFactoryApi(http),
 
