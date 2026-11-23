@@ -1,0 +1,59 @@
+npm notice run npx
+npm notice run 'tsx' tmp-e2e/repro-pm.ts
+
+### pm
+{
+  "id": "f1ee28ea-3681-491a-a655-4257333ff40a",
+  "provider": "copilot"
+}
+
+### start_session in the PM token's tools/list
+true
+
+### message sent
+200
+
+### copilot process/config observed
+[
+  "node /home/fred/.npm-global/bin/copilot --acp --additional-mcp-config=@/tmp/coden-copilot-mcp-PAZ4FK/mcp.json",
+  "config dirs: /tmp/coden-copilot-mcp-PAZ4FK"
+]
+
+### sessions
+[
+  {
+    "id": "f9f64489-5b77-4950-87ee-3b43a5f724e7",
+    "role": "agent",
+    "provider": "fake",
+    "purpose": "prove the copilot PM can start a session",
+    "workKey": "request:copilot-pm-e2e",
+    "worktreePath": "/tmp/codeden-h-x3AJ1i/data/wt/repo/f9f64489",
+    "branch": "codeden/verify-session-start-f9f6",
+    "status": "idle"
+  },
+  {
+    "id": "f1ee28ea-3681-491a-a655-4257333ff40a",
+    "role": "pm",
+    "provider": "copilot",
+    "purpose": "Project manager for repo",
+    "workKey": "pm:repo",
+    "worktreePath": null,
+    "branch": null,
+    "status": "idle"
+  }
+]
+
+### agent session has its own worktree and branch
+{
+  "worktreePath": "/tmp/codeden-h-x3AJ1i/data/wt/repo/f9f64489",
+  "branch": "codeden/verify-session-start-f9f6",
+  "hasWorktree": true,
+  "hasBranch": true
+}
+
+### PM reported starting it
+true
+{"session":{"id":"f1ee28ea-3681-491a-a655-4257333ff40a","projectId":"98da5a78-46fd-4105-a306-6412a65feac6","role":"pm","parentSessionId":null,"startedBy":{"kind":"user"},"purpose":"Project manager for repo","workKey":"pm:repo","scope":{"projectId":"98da5a78-46fd-4105-a306-6412a65feac6"},"progress":null,"title":"PM · repo","provider":"copilot","model":null,"effort":null,"autonomy":"auto","planMode":false,"checks":null,"status":"idle","cwd":"/tmp/codeden-h-x3AJ1i/repo","worktreePath":null,"branch":null,"baseBranch":null,"issue":null,"pr":null,"resumeToken":"394dcfb1-4df5-4a9a-b266-6b05be0923a2","runnerId":"67fd93bb-7869-4ce9-8126-b222655a53c7","automationRunId":null,"rootThreadId":"f1ee28ea-3681-491a-a655-4257333ff40a:thread-root","result":null,"archivedAt":null,"worktreeRemovedAt":null,"forkedFrom":null,"startError":null,"mcpServers":null,"createdAt":"2026-11-23T22:31:59.969Z","updatedAt":"2026-11-23T22:32:08.925Z","endedAt":null},"usage":{"inputTokens":6,"outputTokens":157,"cachedInputTokens":24385,"cacheWriteTokens":24556,"reasoningTokens":59,"contextTokens":24571,"contextWindow":272000},"followups":null,"startMeta":{"workspaceMode":"repo_root","workspaceFallback":null,"forced":null,"queuedBehind":[]},"queuedMessages":0}
+[codeden] 2026-11-23T22:32:09.005Z utility: follow-ups on claude failed: Runner connection closed
+[codeden] 2026-11-23T22:32:09.005Z utility: follow-ups on codex failed: Runner is not connected
+[codeden] 2026-11-23T22:32:09.005Z utility: follow-ups on opencode failed: Runner is not connected
