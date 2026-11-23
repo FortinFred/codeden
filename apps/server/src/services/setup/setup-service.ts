@@ -4,6 +4,7 @@ import type {
   SetupStatus,
   SetupToolId,
 } from "@codeden/contracts";
+import type { CopilotProbe, ResolvedCommand } from "@codeden/providers";
 import { defaultShell, findExecutable, refreshProcessPath } from "@codeden/providers";
 import type { SettingsStore } from "../../settings-store";
 import { errorMessage } from "../errors";
@@ -44,6 +45,8 @@ export interface SetupServiceDeps {
    * its providers after an install or a login and refreshes their model lists.
    */
   onChecked?: (status: SetupStatus) => void;
+  /** Starts Copilot CLI's ACP server once for its check (tests: no real process). */
+  copilotProbe?: (exe: ResolvedCommand) => Promise<CopilotProbe>;
 }
 
 const ORDER: SetupToolId[] = [
@@ -52,6 +55,7 @@ const ORDER: SetupToolId[] = [
   "opencode",
   "cursor",
   "gemini",
+  "copilot",
   "gh",
   "git",
   "browser",
@@ -64,6 +68,7 @@ export const PROVIDER_CHECKS: readonly SetupToolId[] = [
   "opencode",
   "cursor",
   "gemini",
+  "copilot",
 ];
 
 /**
@@ -140,6 +145,7 @@ export class SetupService {
       nodeVersion: this.deps.nodeVersion ?? process.version,
       now: this.now(),
       browserProbe: this.deps.browserProbe,
+      ...(this.deps.copilotProbe ? { copilotProbe: this.deps.copilotProbe } : {}),
       ...(userHome ? { userHome } : {}),
       ...(this.deps.env ? { env: this.deps.env } : {}),
     };

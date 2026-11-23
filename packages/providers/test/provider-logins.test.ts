@@ -41,6 +41,10 @@ const POSIX_LOGINS = [
   "~/.local/share/opencode/auth.json",
   "$XDG_DATA_HOME/opencode/auth.json",
   "~/.config/cursor/auth.json",
+  "~/.copilot/hosts.yml",
+  "$COPILOT_HOME/hosts.yml",
+  "~/.config/github-copilot/auth.db",
+  "$XDG_CONFIG_HOME/github-copilot/auth.db",
   "~/.config/gh/hosts.yml",
   "$XDG_CONFIG_HOME/gh/hosts.yml",
 ];
@@ -56,6 +60,8 @@ const WIN_LOGINS = [
   "C:\\Users\\me\\.claude.json",
   "$env:USERPROFILE\\.gemini\\oauth_creds.json",
   "C:\\Users\\me\\.local\\share\\opencode\\auth.json",
+  "C:\\Users\\me\\.copilot\\hosts.yml",
+  "C:\\Users\\me\\.config\\github-copilot\\auth.db",
   "C:\\Users\\me\\AppData\\Roaming\\GitHub CLI\\hosts.yml",
 ];
 

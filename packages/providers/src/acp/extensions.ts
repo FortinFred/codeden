@@ -110,6 +110,11 @@ export interface AcpAgentSpec {
   authGuard?: (exe: ResolvedCommand) => Promise<string | undefined>;
   /** Its mode ids: full tools, planning, and read-only (when it has them). */
   modes: { agent: string; plan?: string; readOnly?: string };
+  /**
+   * The MCP transports it can start. Stdio is ACP's default at a client's request, but some
+   * servers only start HTTP and SSE ones; `{ stdio: false }` leaves those out with a notice.
+   */
+  mcpTransports?: { stdio?: boolean };
   extensions?: AcpExtensions;
   /**
    * The warning for the agent's own allow-list in the worktree, if it has one with rules: what

@@ -5,6 +5,7 @@ export { ApprovalBroker, type ItemCtx } from "./approvals";
 export * from "./async-queue";
 export * from "./claude";
 export * from "./codex";
+export * from "./copilot";
 export * from "./cursor";
 export { FakeProvider, type FakeProviderOptions } from "./fake/adapter";
 export { FakeSession } from "./fake/session";

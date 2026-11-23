@@ -382,6 +382,78 @@ describe("SetupService", () => {
     expect(missing.check?.fix?.command).toBe("npm install -g @google/gemini-cli");
   });
 
+  it("checks Copilot CLI: its version and one ACP session for the sign-in", async () => {
+    const run = async (
+      version: string | null,
+      probe: { acp: boolean; session: boolean; error?: string },
+    ) => {
+      const table: Record<string, Partial<ExecResult>> = version
+        ? { "copilot --version": { stdout: version } }
+        : {};
+      let probed = false;
+      const status = await service(table, {
+        copilotProbe: async () => {
+          probed = true;
+          return probe;
+        },
+      }).status();
+      return { status, check: status.checks.find((c) => c.id === "copilot"), probed };
+    };
+
+    const signedIn = await run("GitHub Copilot CLI 1.0.114.", { acp: true, session: true });
+    expect(signedIn.check).toMatchObject({
+      label: "Copilot CLI",
+      state: "ok",
+      version: "1.0.114",
+      loggedIn: true,
+      authMethod: "copilot",
+    });
+    expect(signedIn.status.ready).toBe(true);
+    expect(signedIn.probed).toBe(true);
+
+    const signedOut = await run("1.0.114", {
+      acp: true,
+      session: false,
+      error: "Not authenticated: run copilot login",
+    });
+    expect(signedOut.check).toMatchObject({
+      state: "missing",
+      installed: true,
+      loggedIn: false,
+    });
+    expect(signedOut.check?.fix).toEqual({ kind: "login", command: "/bin/copilot login" });
+
+    const unconfirmed = await run("1.0.114", {
+      acp: true,
+      session: false,
+      error: "could not start a session",
+    });
+    expect(unconfirmed.check).toMatchObject({ state: "warning", loggedIn: null });
+
+    const noAcp = await run("1.0.114", {
+      acp: false,
+      session: false,
+      error: "unknown option --acp",
+    });
+    expect(noAcp.check).toMatchObject({
+      state: "missing",
+      message: "This Copilot CLI did not start its ACP server (`copilot --acp`); update it",
+    });
+    expect(noAcp.check?.fix).toEqual({ kind: "upgrade", command: "copilot update" });
+
+    const old = await run("1.0.104", { acp: true, session: true });
+    expect(old.check).toMatchObject({
+      state: "missing",
+      message: "Copilot CLI 1.0.104 is too old (needs 1.0.105+)",
+    });
+    expect(old.check?.fix).toEqual({ kind: "upgrade", command: "copilot update" });
+    expect(old.probed).toBe(false);
+
+    const missing = await run(null, { acp: true, session: true });
+    expect(missing.check).toMatchObject({ state: "missing", installed: false });
+    expect(missing.check?.fix?.command).toBe("npm install -g @github/copilot");
+  });
+
   it("persists completion in settings and hands out login commands", () => {
     const setup = service({});
     setup.complete();
