@@ -41,7 +41,7 @@ export * from "./github";
 export * from "./hook-output";
 export * from "./images-api";
 export * from "./input";
-export * from "./issue-file-format";
+export * from "./issue-file";
 export * from "./issue-sources";
 export * from "./items";
 export * from "./mcp-status";
