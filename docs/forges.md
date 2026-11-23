@@ -4,6 +4,12 @@
 > This is part of the design (`docs/DESIGN.md` §3, §9, §10.1); the exact wording is in §11 and was
 > applied to `docs/DESIGN.md` in this change.
 
+> **Note (2026-11-23):** the issue source is now decoupled from the forge
+> ([issue-sources.md](issue-sources.md)). A project may take its issues from files in the
+> repository while its pull requests stay on the forge. This document's issue sync, issue writes
+> and issue trust rules apply when the project's issue source is its forge; the forge port, PR
+> flow, checks, merge and evidence are unaffected.
+
 CodeDen was GitHub-only by a locked decision (§3, §9, §10.1) until this design was approved. This
 document designs a second forge: a self-hosted **Forgejo** instance, reached through its
 Gitea-compatible REST API v1, so a project whose `origin` is a local Forgejo repository gets issues
