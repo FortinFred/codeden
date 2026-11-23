@@ -23,6 +23,7 @@ import { ProjectSettings } from "@/components/project/project-settings";
 import { ProjectTile } from "@/components/shell/sidebar/project-group";
 import { Button } from "@/components/ui/button";
 import { ProjectSpendCard } from "@/components/usage/project-spend-card";
+import { projectForgeName } from "@/lib/forge";
 import { useProjectStatus } from "@/lib/orchestration";
 import { useSnapshot } from "@/lib/queries";
 import { activeSessions, type SessionView, sessionCounts } from "@/lib/session-filter";
@@ -63,9 +64,12 @@ export function ProjectPage({
   const counts = sessionCounts(data, projectId);
   const active = activeSessions(data.sessions, projectId);
   const factory = isFactoryMode(project.autonomyMode);
-  // Nothing is synced from a forge until phase A2: no GitHub panel, and no GitHub requests.
-  const tabs: ProjectTab[] =
-    project.kind === "forge" ? ["overview", "settings"] : ["overview", "github", "settings"];
+  // GitHub and forge projects have the issue/PR tab; a local-only one explains how to connect.
+  const tabs: ProjectTab[] = ["overview", "github", "settings"];
+  const labels: Record<ProjectTab, string> = {
+    ...TAB_LABELS,
+    github: projectForgeName(project),
+  };
   const activeTab: ProjectTab = tabs.includes(tab) ? tab : "overview";
   const titleOf = (id: string | null) => data.sessions.find((s) => s.id === id)?.title ?? null;
   const go = (search: ProjectSearch) =>
@@ -165,7 +169,7 @@ export function ProjectPage({
               activeTab === t && "border-primary text-foreground",
             )}
           >
-            {TAB_LABELS[t]}
+            {labels[t]}
           </button>
         ))}
       </div>

@@ -97,15 +97,20 @@ function LinkedSession({ sessionId }: { sessionId: string }) {
 }
 
 /**
- * Live PR details (§9): state, checks, reviews, files changed (each with its diff), linked
- * session and merge.
+ * Live PR details (§9): state, checks, reviews, commits, files changed (each with its diff),
+ * linked session and merge. `readOnly` hides the merge for a forge project (`docs/forges.md` phase A2);
+ * `provider` names the forge in the files view's links.
  */
 export function PrDetailsView({
   prId,
   showSession = true,
+  readOnly = false,
+  provider = "GitHub",
 }: {
   prId: string;
   showSession?: boolean;
+  readOnly?: boolean;
+  provider?: string;
 }) {
   const client = useClient();
   const files = useOpenFiles();
@@ -152,7 +157,7 @@ export function PrDetailsView({
           </code>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <MergeButton pr={pr} />
+          {!readOnly && <MergeButton pr={pr} />}
           {pr.mergeable === "conflicting" && (
             <span className="text-2xs text-status-failed">Merge conflicts</span>
           )}
@@ -217,11 +222,30 @@ export function PrDetailsView({
         )}
       </Section>
 
+      <Section title={`Commits · ${pr.commits.length}`}>
+        {pr.commits.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No commits on the head branch.</p>
+        ) : (
+          <div className="divide-y divide-border rounded-lg border border-border">
+            {pr.commits.map((c) => (
+              <div key={c.sha} className="flex items-center gap-2 px-3 py-1.5 text-[13px]">
+                <code className="shrink-0 font-mono text-2xs text-muted-foreground" title={c.sha}>
+                  {c.sha.slice(0, 7)}
+                </code>
+                <span className="min-w-0 flex-1 truncate" title={c.message}>
+                  {c.message}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+
       <Section
         title={`Files changed · ${pr.changedFiles}`}
         action={<PrFilesToggle pr={pr} open={files.open} onChange={files.setOpen} />}
       >
-        <PrFiles pr={pr} open={files.open} onToggle={files.toggle} />
+        <PrFiles pr={pr} open={files.open} onToggle={files.toggle} provider={provider} />
       </Section>
 
       {pr.body.trim() && (

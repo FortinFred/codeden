@@ -9,7 +9,8 @@ import { useLayoutStore } from "@/stores/layout";
 
 /**
  * Issue and PR badges in the thread header, with the PR's live checks from
- * `/api/sessions/:id/github`. Clicking opens the Issue / PR tab.
+ * `/api/sessions/:id/github`. Clicking opens the Issue / PR tab. A forge project answers the
+ * same read (`docs/forges.md` phase A2).
  */
 export function SessionGithubBadges({
   session,
@@ -21,7 +22,8 @@ export function SessionGithubBadges({
   const client = useClient();
   const project = useProject(session.projectId);
   const openTab = useLayoutStore((s) => s.openRightTab);
-  const enabled = project?.kind === "github" && session.role === "agent";
+  const enabled =
+    (project?.kind === "github" || project?.kind === "forge") && session.role === "agent";
   const { data } = useQuery({
     queryKey: ["github", "session", session.id],
     queryFn: () => client.github.session(session.id),

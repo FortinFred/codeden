@@ -1,15 +1,16 @@
 import { z } from "zod";
 import { defineTool } from "../../define";
-import { inGithubProject } from "../github/available";
-import { githubProject } from "../shared/helpers";
+import { inGithubProject, inIssueTrackingProject } from "../github/available";
+import { githubProject, issueTrackingProject } from "../shared/helpers";
 
-/** `list_issues` (§8.3). */
+/** `list_issues` (§8.3): read-only, so it is listed for a forge project too (phase A2). */
 export const listIssues = defineTool({
   name: "list_issues",
-  description: "List this project's GitHub issues (open by default), optionally by label.",
+  description:
+    "List this project's issues from its forge (GitHub, or Forgejo for a forge project), open by default, optionally by label.",
   roles: ["pm"],
   scope: "project",
-  isAvailable: inGithubProject,
+  isAvailable: inIssueTrackingProject,
   input: z.object({
     state: z.enum(["open", "closed", "all"]).optional(),
     labels: z.array(z.string()).optional(),
@@ -17,23 +18,23 @@ export const listIssues = defineTool({
   }),
   handler: async (query, { services, projectId }) => {
     const issues = await services.orchestration.github.listIssues(
-      githubProject(services, projectId),
+      issueTrackingProject(services, projectId),
       query,
     );
     return { count: issues.length, issues };
   },
 });
 
-/** `get_issue` (§8.3). */
+/** `get_issue` (§8.3): a read, so it is listed for a forge project too (phase A2). */
 export const getIssue = defineTool({
   name: "get_issue",
-  description: "One GitHub issue of this project with its body and comments.",
+  description: "One issue of this project from its forge, with its body and comments.",
   roles: ["pm"],
   scope: "project",
-  isAvailable: inGithubProject,
+  isAvailable: inIssueTrackingProject,
   input: z.object({ number: z.int().positive() }),
   handler: async ({ number }, { services, projectId }) =>
-    services.orchestration.github.getIssue(githubProject(services, projectId), number),
+    services.orchestration.github.getIssue(issueTrackingProject(services, projectId), number),
 });
 
 /** `triage_issue` (§8.3, §10 issue triage): labels, comment, accept or decline. */
