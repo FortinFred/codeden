@@ -103,6 +103,11 @@ export function withoutMarker(body: string): string {
   return body.replace(MARKER_SUFFIX, "").replace(CODEDEN_COMMENT_MARKER, "");
 }
 
+/** The body to post: `body`, with CodeDen's hidden marker appended unless it already has one. */
+export function withCodedenMarker(body: string): string {
+  return isCodedenComment(body) ? body : `${body}${MARKER_SUFFIX}`;
+}
+
 export async function commentOnIssue(
   deps: Pick<IssueDeps, "client">,
   repo: GitHubRepo,
@@ -114,7 +119,7 @@ export async function commentOnIssue(
       owner: repo.owner,
       repo: repo.repo,
       issue_number: number,
-      body: isCodedenComment(body) ? body : `${body}${MARKER_SUFFIX}`,
+      body: withCodedenMarker(body),
     });
     return { id: res.data.id, url: res.data.html_url };
   });

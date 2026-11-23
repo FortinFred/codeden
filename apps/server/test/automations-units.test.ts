@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   type Automation,
   AutomationGuards,
+  type AutomationTemplate,
   FactoryLimits,
   type Project,
   type WorkSummary,
@@ -29,6 +30,7 @@ import {
   preflightSkip,
 } from "../src/services/automations/guards";
 import { renderTemplate, renderWorkKey } from "../src/services/automations/prompt";
+import { templateFits } from "../src/services/automations/sources";
 import {
   fileStemToId,
   findTemplatesDir,
@@ -234,6 +236,24 @@ describe("templates and automation files", () => {
       policy: { autoStart: true, comment: true, labels: { ready: ["triage:ready"] } },
       instructions: "Be strict.",
     });
+  });
+
+  it("offers triage to a forge project but not to a local one (phase B1)", () => {
+    const project = (kind: Project["kind"]) => ({ kind }) as Project;
+    const triage = {
+      action: { type: "triage" },
+      requiresGithub: false,
+    } as unknown as AutomationTemplate;
+    const prFollowUp = {
+      action: { type: "start_session", prompt: "Review the PR" },
+      requiresGithub: true,
+    } as unknown as AutomationTemplate;
+
+    expect(templateFits(triage, project("github"))).toBe(true);
+    expect(templateFits(triage, project("forge"))).toBe(true);
+    expect(templateFits(triage, project("local"))).toBe(false);
+    expect(templateFits(prFollowUp, project("forge"))).toBe(false);
+    expect(templateFits(prFollowUp, project("github"))).toBe(true);
   });
 
   it("ships seven built-in templates with work keys and a starter set", () => {

@@ -31,7 +31,9 @@ export function issuesNamed(input: { issueNumber?: number; workKey?: string }): 
 
 /**
  * Refuse to start a session on issues whose author isn't trusted (the rule triage uses), unless
- * the user asked for it in this turn. Projects without GitHub issues have no outside authors.
+ * the user asked for it in this turn. Projects without issues have no outside authors. A forge
+ * project follows the same rule; its trust check trusts only `trustedAuthors` for now
+ * (`docs/forges.md` §6.2).
  */
 export async function assertMayStartOnIssues(
   services: AppServices,
@@ -39,7 +41,7 @@ export async function assertMayStartOnIssues(
   project: Project,
   numbers: number[],
 ): Promise<void> {
-  if (project.kind !== "github" || numbers.length === 0) return;
+  if (project.kind === "local" || numbers.length === 0) return;
   if (userAskedThisTurn(services, caller)) return;
   for (const number of numbers) {
     const trust = await services.automations.triage.issueAuthorTrust(project, number);
@@ -83,6 +85,6 @@ function startRefusal(number: number, { author, checked }: AuthorTrust): string 
   const who = author ? `@${author}` : "an unknown author";
   const why = checked
     ? `${who}, who isn't a trusted author and has no write access to the repository`
-    : `${who}, who isn't a trusted author (CodeDen couldn't check their write access on GitHub)`;
+    : `${who}, who isn't a trusted author (CodeDen couldn't check their write access)`;
   return `Not started: issue #${number} was opened by ${why}, and this turn wasn't started by the user's own message, so only the user can decide to start work on it. Put it in their inbox instead: report_triage with decision "ready" and a short summary asks them "Should I take this on?". Don't call start_session for it again in this turn.`;
 }

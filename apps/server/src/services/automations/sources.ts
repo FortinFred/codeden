@@ -291,7 +291,14 @@ export class AutomationSources {
   }
 }
 
-/** True when a project can run a template (GitHub-only templates need a GitHub project). */
+/**
+ * True when a project can run a template: GitHub-only templates (a PR follow-up, a review) need
+ * a GitHub project, and triage needs issues to triage (a GitHub or a forge project, since phase
+ * B1). A local project gets only the templates that need no forge.
+ */
 export function templateFits(template: AutomationTemplate, project: Project): boolean {
+  if (template.action.type === "triage") {
+    return project.kind === "github" || project.kind === "forge";
+  }
   return !template.requiresGithub || project.kind === "github";
 }

@@ -1,8 +1,8 @@
 import { ConflictDecision, TriageReport } from "@codeden/contracts";
 import { z } from "zod";
 import { defineTool } from "../../define";
-import { inGithubProject } from "../github/available";
-import { githubProject } from "../shared/helpers";
+import { inIssueTrackingProject } from "../github/available";
+import { issueTrackingProject } from "../shared/helpers";
 
 /** `list_automations` (§8.3): this project's automations with their state. */
 export const listAutomations = defineTool({
@@ -60,8 +60,8 @@ export const reportTriage = defineTool({
     "After classifying a new issue and applying labels/comment with triage_issue, report the decision. For 'ready' issues CodeDen then either starts an agent session (when the project's triage policy allows it) or asks the user 'Should I take this on?' in the inbox. Do not call start_session for triaged issues yourself.",
   roles: ["pm"],
   scope: "project",
-  isAvailable: inGithubProject,
+  isAvailable: inIssueTrackingProject,
   input: TriageReport,
   handler: async (report, { services, projectId }) =>
-    services.automations.triage.report(githubProject(services, projectId), report),
+    services.automations.triage.report(issueTrackingProject(services, projectId), report),
 });

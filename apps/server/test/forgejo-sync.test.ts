@@ -394,10 +394,10 @@ describe("forge read APIs", () => {
     expect((await env.github.listIssues(P))[0]?.number).toBe(bug.number);
     expect(env.github.listPrs(P)[0]?.number).toBe(pr.number);
 
-    // A forge project's GitHub write route fails closed without touching either forge.
+    // A forge project's GitHub-only writes fail closed without touching either forge.
     try {
-      env.github.createIssue(P, { title: "x", body: "", labels: [] });
-      expect.unreachable("a forge project must not accept a GitHub write");
+      await env.github.mergePr(`${P}:${pr.number}`, { method: "squash" });
+      expect.unreachable("a forge project must not accept a GitHub PR write");
     } catch (error) {
       expect(error).toMatchObject({ code: "not_a_github_project", status: 409 });
     }

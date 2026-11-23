@@ -1,10 +1,12 @@
 import {
+  type CreateGithubIssueRequest,
   type ForgePr,
   type ForgeRepo,
   type GithubConnection,
   type GithubIssue,
   GithubIssueDetails,
   type GithubIssuesResponse,
+  type GithubLabelRequest,
   GithubPr,
   GithubPrDetails,
   type GithubPrDiff,
@@ -12,6 +14,8 @@ import {
   type GithubSyncStatus,
   type Project,
   type Settings,
+  type TriageIssueRequest,
+  type TriageIssueResult,
 } from "@codeden/contracts";
 import type { EventStore } from "../../events/store";
 import { conflict, ForgeError } from "../errors";
@@ -22,6 +26,7 @@ import type { SecretStore } from "../secrets";
 import { FORGEJO_TOKEN_KEY, type ForgejoConnection } from "./connection";
 import { ForgejoClient } from "./forgejo/client";
 import { ForgejoSync, type ForgeProject } from "./forgejo/sync";
+import * as issues from "./issues";
 
 export interface ForgeServiceDeps {
   /** Domain events, for the sync's appends. */
@@ -45,12 +50,13 @@ export interface ForgeServiceDeps {
 }
 
 /**
- * A forge project's reads and sync (`docs/forges.md` §4.3, §8.1), the counterpart of
- * `GithubService` for Forgejo. Issue and PR lists come from the shared projection tables; one
- * issue, one PR and its diff are read fresh through the client. The sync polls each configured
- * forge project and writes the same `forge.synced`, `issue.*`, `pr.*` and `review.submitted`
- * events as GitHub, so the existing projections, session PR links and read responses need no
- * provider branch. Nothing in this phase writes to the forge.
+ * A forge project's reads, sync and issue writes (`docs/forges.md` §4.3, §5.4, §8.1), the
+ * counterpart of `GithubService` for Forgejo. Issue and PR lists come from the shared projection
+ * tables; one issue, one PR and its diff are read fresh through the client. The sync polls each
+ * configured forge project and writes the same `forge.synced`, `issue.*`, `pr.*` and
+ * `review.submitted` events as GitHub, so the existing projections, session PR links and read
+ * responses need no provider branch. Issue writes (create, comment, label, triage) go through the
+ * client and are projected at once; PR and evidence writes stay GitHub-only until phase B2.
  */
 export class ForgeService {
   readonly sync: ForgejoSync;
@@ -146,6 +152,46 @@ export class ForgeService {
     };
   }
 
+  /** Create an issue; names resolve to the repository's label IDs, unknown ones are reported. */
+  createIssue(projectId: string, req: CreateGithubIssueRequest): Promise<GithubIssue> {
+    return issues.createIssue(this.issueDeps(), projectId, this.clientForProject(projectId), req);
+  }
+
+  /** Comment on an issue or a PR conversation, with CodeDen's hidden marker. */
+  commentOnIssue(
+    projectId: string,
+    number: number,
+    body: string,
+  ): Promise<{ id: number; url: string }> {
+    return issues.commentOnIssue(this.clientForProject(projectId), number, body);
+  }
+
+  /** Add and remove labels by name; the read-back says what actually applied. */
+  labelIssue(projectId: string, number: number, req: GithubLabelRequest): Promise<GithubIssue> {
+    return issues.labelIssue(
+      this.issueDeps(),
+      projectId,
+      this.clientForProject(projectId),
+      number,
+      req,
+    );
+  }
+
+  /** A triage decision: labels, comment and optionally a close (no close reason exists). */
+  triageIssue(
+    projectId: string,
+    number: number,
+    req: TriageIssueRequest,
+  ): Promise<TriageIssueResult> {
+    return issues.triageIssue(
+      this.issueDeps(),
+      projectId,
+      this.clientForProject(projectId),
+      number,
+      req,
+    );
+  }
+
   /* ------------------------------------------------------------ pull requests */
 
   listPrs(projectId: string, state: IssueStateFilter = "open", limit = 100): ForgePr[] {
@@ -200,6 +246,10 @@ export class ForgeService {
   }
 
   /* ------------------------------------------------------------ helpers */
+
+  private issueDeps(): issues.ForgeIssueDeps {
+    return { data: this.deps.data, events: this.deps.store, log: this.deps.log };
+  }
 
   /** The client for a project, or null when no forge connection is configured. */
   private clientFor(project: ForgeProject): ForgejoClient | null {
