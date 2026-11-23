@@ -139,18 +139,33 @@ describe("choosing a permission option", () => {
   const no = { optionId: "no", kind: "reject_once" };
   const never = { optionId: "never", kind: "reject_always" };
 
-  it("only ever picks a once option, so nothing is saved in the agent's settings", () => {
+  it("picks a once option whenever the agent offers one", () => {
     expect(select([always, once, never, no], "allow")).toEqual({
       outcome: { outcome: "selected", optionId: "yes" },
     });
     expect(select([always, never, no], "reject")).toEqual({
       outcome: { outcome: "selected", optionId: "no" },
     });
-    // Without a once option to allow with, the call is refused once.
+    // Without a once option to allow with, the always option carries the approval.
     expect(select([always, no], "allow")).toEqual({
+      outcome: { outcome: "selected", optionId: "always" },
+    });
+    // Approval with no allow option at all: refuse rather than leave the call unanswered.
+    expect(select([no, never], "allow")).toEqual({
       outcome: { outcome: "selected", optionId: "no" },
     });
-    // With only "always" options, the request is cancelled.
-    expect(select([always, never], "reject")).toEqual({ outcome: { outcome: "cancelled" } });
+  });
+
+  it("uses an always option when it is the only one, rather than cancelling the call", () => {
+    // Copilot CLI ends a turn silently when a request is answered `cancelled` (#5514), so a
+    // request with only "always" options answers with the decision it can carry.
+    expect(select([always, never], "allow")).toEqual({
+      outcome: { outcome: "selected", optionId: "always" },
+    });
+    expect(select([always, never], "reject")).toEqual({
+      outcome: { outcome: "selected", optionId: "never" },
+    });
+    expect(select([], "allow")).toEqual({ outcome: { outcome: "cancelled" } });
+    expect(select(undefined as never, "reject")).toEqual({ outcome: { outcome: "cancelled" } });
   });
 });

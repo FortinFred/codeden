@@ -10,6 +10,8 @@ import {
   parseCopilotModelChoices,
 } from "../src";
 import { acpMcpServers, skippedNotice } from "../src/acp/config";
+import { COPILOT_AGENT } from "../src/copilot/adapter";
+import { copilotFacts } from "../src/copilot/extensions";
 
 const HELP = `  \`model\`: AI model to use for Copilot CLI, including custom and local models.
     - "claude-sonnet-5.5"
@@ -63,6 +65,22 @@ describe("Copilot CLI models", () => {
     expect(skippedNotice("Copilot CLI", skipped, "stdio MCP servers")).toBe(
       "Copilot CLI can't connect to stdio MCP servers, so local is not available in this session.",
     );
+  });
+});
+
+describe("Copilot CLI's vendor fields", () => {
+  it("reads a subagent's agent id off its tool call", () => {
+    expect(
+      copilotFacts({
+        toolCallId: "c1",
+        _meta: { "github.com/copilot": { agentId: "agent-7" } },
+      }),
+    ).toEqual({ agent: "agent-7" });
+    expect(copilotFacts({ toolCallId: "c2" })).toBeUndefined();
+    expect(copilotFacts({ toolCallId: "c3", _meta: { "github.com/copilot": {} } })).toBeUndefined();
+    // Copilot has no vendor requests of its own: its extensions only read tool calls.
+    expect(COPILOT_AGENT.extensions?.toolCall).toBe(copilotFacts);
+    expect(COPILOT_AGENT.extensions?.clientCapabilities).toBeUndefined();
   });
 });
 

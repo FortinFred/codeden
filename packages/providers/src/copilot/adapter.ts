@@ -20,6 +20,7 @@ import {
   detectCopilot,
   isSupportedCopilotVersion,
 } from "./detect";
+import { copilotExtensions } from "./extensions";
 import {
   copilotModelsFromIds,
   copilotSessionModels,
@@ -43,16 +44,21 @@ export const COPILOT_AGENT: AcpAgentSpec = {
   modes: { agent: `${MODE_BASE}agent`, plan: `${MODE_BASE}plan` },
   // Its ACP server starts HTTP and SSE servers only: stdio ones it takes and ignores.
   mcpTransports: { stdio: false },
+  extensions: copilotExtensions,
 };
 
 /**
  * Honest flags (Principle 5). Approvals and the read-only level go through Copilot CLI's
  * permission requests, decided by CodeDen's policy for every call (so autonomy changes apply
  * live). Plan mode is its `plan` mode; resume is `session/load`. Not wired up: questions (its
- * `ask_user` is an interactive form the ACP server doesn't carry), steering (ACP has no way to
- * add input to a running prompt), subagents, rollback, fork and reasoning effort (the CLI takes
- * it at launch, not per session). Images and MCP servers (CodeDen's tools are an HTTP MCP
- * server) follow what the CLI reports in `initialize`; plan mode, what its sessions list.
+ * `ask_user` is an interactive form the ACP server doesn't carry; ACP mode doesn't offer the
+ * tool to the model at all), steering (ACP has no way to add input to a running prompt),
+ * subagents as child threads (Copilot runs them inside the one ACP session and never sends
+ * `subagent_spawned`; their tool calls and asks still reach CodeDen on the root session and are
+ * labelled by their agent id, see `copilot/extensions.ts`), rollback, fork and reasoning effort
+ * (the CLI takes it at launch, not per session). Images and MCP servers (CodeDen's tools are an
+ * HTTP MCP server) follow what the CLI reports in `initialize`; plan mode, what its sessions
+ * list.
  */
 const BASE_CAPABILITIES: ProviderCapabilities = {
   resume: true,
