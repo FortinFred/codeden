@@ -142,6 +142,12 @@ Don't delete CodeDen's chats (with Backspace or Delete in `agent ls`, or from Cu
 
 Copilot CLI saves every prompted session in `~/.copilot/session-store.db`, and `copilot --resume` lists them across folders, CodeDen's included (agent sessions, factory builders and reviewers, PMs and the orchestrator). It has no ACP request to archive or hide a conversation, so CodeDen can't keep its sessions out of that list; `vendorHistory` stays unset. An empty session, such as the one detection opens to check the sign-in, saves nothing.
 
+### A Copilot PM says it has no `start_session`
+
+Copilot CLI's tool search can hold an MCP server's tools back until the model searches for them. On a model that uses tool search, a PM can therefore say it has no `start_session` while the same PM on another provider has it. CodeDen now hands its own MCP server to Copilot as a per-session `--additional-mcp-config` entry with `deferTools: "never"`, so CodeDen's tools are always in the PM's tool set. This keeps the role rules: the server still lists only the tools of the session's role, and agents never get `start_session`.
+
+If a CodeDen tool is still missing on Copilot, check Copilot's own MCP configuration (`copilot mcp list`, `/mcp` in an interactive session, or `~/.copilot/mcp-config.json`) for a `coden` entry that restricts its `tools`, or a saved policy that hides it. CodeDen's entry is per session and is removed when the session closes.
+
 ### A Copilot CLI turn ends right after a tool asks
 
 You see a turn run, a tool starts (often one a subagent is running), and then the turn ends with no reply — sometimes with "Info: Operation cancelled by user", sometimes with nothing at all. The permission request CodeDen received was answered with a cancellation or an error, and Copilot CLI 1.0.114 treats either as a user denial: it ends that (sub)agent's turn without another model call and without telling you (upstream issue [copilot-cli#5514](https://github.com/github/copilot-cli/issues/5514)).

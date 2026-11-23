@@ -136,6 +136,26 @@ describe("CodeDen MCP endpoint", () => {
     await pm.close();
   });
 
+  it("lists a PM's start_session over the runner proxy with a flat conflict schema", async () => {
+    const pmToken = h.server.services.mcpTokens.mint({
+      role: "pm",
+      sessionId: "pm-session",
+      projectId: h.projectId,
+    });
+    const pm = await connect(pmToken);
+    const start = (await pm.listTools()).tools.find((t) => t.name === "start_session");
+    if (!start) throw new Error("start_session is missing from the PM's tools");
+    const conflict = (
+      start.inputSchema as {
+        properties?: Record<string, { type?: string; oneOf?: unknown; anyOf?: unknown }>;
+      }
+    ).properties?.conflict;
+    expect(conflict).toMatchObject({ type: "object" });
+    expect(conflict).not.toHaveProperty("oneOf");
+    expect(conflict).not.toHaveProperty("anyOf");
+    await pm.close();
+  });
+
   it("records progress, follow-ups, shared images and the result", async () => {
     const client = await connect(token);
     await client.callTool({ name: "report_progress", arguments: { text: "Writing tests" } });

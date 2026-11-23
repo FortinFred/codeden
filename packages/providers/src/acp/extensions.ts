@@ -129,6 +129,16 @@ export interface AcpSessionConfig {
   spec: AcpAgentSpec;
   /** The agent reported its session setup (models, modes): for the adapter's model list. */
   onSetup?: (setup: AcpSessionSetup, info: AcpInitializeResult) => void;
+  /** Extra argv for every start of the agent process (a per-session config file, for example). */
+  args?: string[];
+  /**
+   * The MCP servers were handed to the agent outside ACP (see `args`), so `session/new` and
+   * `session/load` carry none. The session's policy still trusts the names in
+   * `SessionOptions.mcpServers`.
+   */
+  mcpViaArgs?: boolean;
+  /** Called once when the session closes: removes per-session files the extra args name. */
+  onClose?: () => Promise<void>;
   startTimeoutMs?: number;
   interruptTimeoutMs?: number;
 }

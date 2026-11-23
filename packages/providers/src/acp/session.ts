@@ -23,6 +23,7 @@ import type {
   AcpConfigOption,
   AcpIncoming,
   AcpInitializeResult,
+  AcpMcpServer,
   AcpPermissionRequest,
   AcpPromptResult,
   AcpSessionNotification,
@@ -202,7 +203,13 @@ export class AcpSession implements ProviderSession {
     this.broker.cancelAll();
     this.mapper.endTurn({ type: "interrupted" });
     this.events.close();
-    await this.rpc?.close();
+    try {
+      await this.rpc?.close();
+    } finally {
+      // A per-session config file (e.g. Copilot's --additional-mcp-config) is done with this
+      // session's process; cleanup never blocks closing.
+      await this.config.onClose?.().catch(() => undefined);
+    }
   }
 
   // ---------------------------------------------------------------- internals
@@ -267,7 +274,7 @@ export class AcpSession implements ProviderSession {
         },
       },
       {
-        args: spec.args,
+        args: [...spec.args, ...(this.config.args ?? [])],
         label: spec.label,
         ...(spec.authMethod ? { authMethod: spec.authMethod } : {}),
         ...(spec.authGuard
@@ -302,14 +309,22 @@ export class AcpSession implements ProviderSession {
   private async openSession(rpc: AcpRpc): Promise<void> {
     const { label } = this.config.spec;
     const transports = this.config.spec.mcpTransports;
-    const { servers, skipped } = acpMcpServers(
-      this.opts.mcpServers,
-      agentCan(this.info, "http"),
-      transports ?? {},
-    );
-    this.addNotice(
-      skippedNotice(label, skipped, transports?.stdio === false ? "stdio MCP servers" : undefined),
-    );
+    let servers: AcpMcpServer[] = [];
+    let skipped: string[] = [];
+    if (this.config.mcpViaArgs !== true) {
+      ({ servers, skipped } = acpMcpServers(
+        this.opts.mcpServers,
+        agentCan(this.info, "http"),
+        transports ?? {},
+      ));
+      this.addNotice(
+        skippedNotice(
+          label,
+          skipped,
+          transports?.stdio === false ? "stdio MCP servers" : undefined,
+        ),
+      );
+    }
     // `session/load` replays the history first, mode and config updates included: none of it
     // is news, and a replayed mode change must not end plan mode.
     this.mapper.replaying = true;

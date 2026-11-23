@@ -1,3 +1,5 @@
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { dirname } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   copilotModelLabel,
@@ -12,6 +14,7 @@ import {
 import { acpMcpServers, skippedNotice } from "../src/acp/config";
 import { COPILOT_AGENT } from "../src/copilot/adapter";
 import { copilotFacts } from "../src/copilot/extensions";
+import { copilotMcpArgs } from "../src/copilot/mcp-config";
 
 const HELP = `  \`model\`: AI model to use for Copilot CLI, including custom and local models.
     - "claude-sonnet-5.5"
@@ -65,6 +68,47 @@ describe("Copilot CLI models", () => {
     expect(skippedNotice("Copilot CLI", skipped, "stdio MCP servers")).toBe(
       "Copilot CLI can't connect to stdio MCP servers, so local is not available in this session.",
     );
+  });
+
+  it("hands Copilot an always-loaded MCP config in a private, per-session file", async () => {
+    const mcp = await copilotMcpArgs([
+      {
+        transport: "http",
+        name: "coden",
+        url: "http://127.0.0.1:5000/mcp",
+        headers: { Authorization: "Bearer secret" },
+        toolTimeoutSec: 600,
+        trusted: true,
+      },
+    ]);
+    expect(mcp).toBeDefined();
+    const file = mcp?.args[0]?.replace("--additional-mcp-config=@", "") ?? "";
+    expect(file).not.toBe("");
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
+      mcpServers: {
+        coden: {
+          type: "http",
+          url: "http://127.0.0.1:5000/mcp",
+          headers: { Authorization: "Bearer secret" },
+          tools: ["*"],
+          deferTools: "never",
+          disableToolCache: true,
+          timeout: 600_000,
+        },
+      },
+    });
+    await mcp?.cleanup();
+    expect(existsSync(dirname(file))).toBe(false);
+  });
+
+  it("has no config file to hand over when there is no HTTP server", async () => {
+    expect(await copilotMcpArgs([])).toBeUndefined();
+    expect(
+      await copilotMcpArgs([
+        { transport: "stdio", name: "local", command: "node", args: ["server.js"] },
+      ]),
+    ).toBeUndefined();
   });
 });
 

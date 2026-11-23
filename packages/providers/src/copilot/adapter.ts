@@ -21,6 +21,7 @@ import {
   isSupportedCopilotVersion,
 } from "./detect";
 import { copilotExtensions } from "./extensions";
+import { copilotMcpArgs } from "./mcp-config";
 import {
   copilotModelsFromIds,
   copilotSessionModels,
@@ -217,6 +218,10 @@ export class CopilotAdapter implements ProviderAdapter {
         "setup",
       );
     }
+    // ACP's session/new has no `deferTools`, so hand the servers to the CLI instead; without
+    // it tool search can keep CodeDen's tools (a PM's `start_session` included) out of the
+    // model's tool set. If the file cannot be written, the ACP list stays the fallback.
+    const mcp = await copilotMcpArgs(opts.mcpServers).catch(() => undefined);
     const session = new AcpSession(opts, {
       executable: found.command,
       spec: COPILOT_AGENT,
@@ -225,6 +230,7 @@ export class CopilotAdapter implements ProviderAdapter {
       ...(this.options.interruptTimeoutMs
         ? { interruptTimeoutMs: this.options.interruptTimeoutMs }
         : {}),
+      ...(mcp ? { args: mcp.args, mcpViaArgs: true, onClose: mcp.cleanup } : {}),
     });
     try {
       await session.start();

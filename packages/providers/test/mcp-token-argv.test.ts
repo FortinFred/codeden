@@ -14,9 +14,11 @@ import type { ProviderSession } from "../src/adapter";
 import { buildQueryOptions } from "../src/claude/options";
 import { ClaudeSession } from "../src/claude/session";
 import { CodexSession } from "../src/codex/session";
+import { CopilotAdapter } from "../src/copilot/adapter";
 import { CursorAdapter } from "../src/cursor/adapter";
 import { GeminiAdapter } from "../src/gemini/adapter";
 import { OpenCodeAdapter } from "../src/opencode/adapter";
+import { FAKE_COPILOT_VERSION } from "./support/fake-acp";
 
 /**
  * MCP bearer tokens never go on an agent CLI's command line (§15): any local process can read a
@@ -236,6 +238,39 @@ describe("MCP tokens stay off provider command lines", () => {
     );
     expectNoTokenIn(spawned);
     expect(readFileSync(log, "utf8")).toContain(TOKEN);
+  });
+
+  it("Copilot (ACP): the token goes in a private --additional-mcp-config file", async () => {
+    const log = join(dir, "acp.log");
+    const script = join(dir, "script.json");
+    writeFileSync(script, "[]");
+    const adapter = new CopilotAdapter({
+      executable: fixture("fake-acp", "agent.mjs"),
+      probeTimeoutMs: 5_000,
+    });
+    const session = await adapter.openSession(
+      options({
+        env: { FAKE_ACP_LOG: log, FAKE_ACP_SCRIPT: script, FAKE_ACP_VERSION: FAKE_COPILOT_VERSION },
+      }),
+    );
+    sessions.push(session);
+    expectNoTokenIn(spawned);
+    const arg = spawned.flat().find((a) => a.startsWith("--additional-mcp-config=@"));
+    expect(arg).toBeDefined();
+    const file = arg?.slice("--additional-mcp-config=@".length) ?? "";
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+    expect(readFileSync(file, "utf8")).toContain(TOKEN);
+    // The agent still gets its tools; the token is not in its command line.
+    const opened = readFileSync(log, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { method?: string; params?: unknown });
+    expect(opened.find((m) => m.method === "session/new")?.params).toMatchObject({
+      mcpServers: [],
+    });
+    expect(readFileSync(log, "utf8")).not.toContain(TOKEN);
+    await session.close();
+    expect(existsSync(dirname(file))).toBe(false);
   });
 
   it("Gemini (ACP): the token goes over stdin (session/new)", async () => {

@@ -1,6 +1,8 @@
 import {
-  ConflictDecision,
+  type ConflictDecision,
+  ConflictResolution,
   FACTORY_HOLD_REASON_MAX,
+  Id,
   messageFrom,
   ProviderId,
   ReasoningEffort,
@@ -16,6 +18,55 @@ import { describeProviderParam, fallbackProvider } from "../shared/provider-choi
 import { assertMayStartOnIssues, issuesNamed } from "./issue-trust";
 
 const ENDED = new Set(["completed", "failed", "stopped"]);
+
+/**
+ * `start_session`'s `conflict` argument as a flat object, not the contracts' discriminated
+ * union: some providers' MCP clients translate union schemas badly or drop the tool. The
+ * fields keep their meaning and the resolution's own fields are required here; the handler
+ * turns this into a `ConflictDecision` for the session service.
+ */
+const ConflictInput = z
+  .object({
+    resolution: ConflictResolution.describe("wait, skip, join or force"),
+    behindId: Id.optional().describe("wait: the work to queue behind (optional)"),
+    sessionId: Id.optional().describe("join: the existing session to add the prompt to"),
+    reason: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("force: why starting anyway is right (required for force)"),
+  })
+  .superRefine((value, ctx) => {
+    if (value.resolution === "join" && !value.sessionId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["sessionId"],
+        message: "join needs the sessionId of the existing session",
+      });
+    }
+    if (value.resolution === "force" && !value.reason) {
+      ctx.addIssue({ code: "custom", path: ["reason"], message: "force needs a reason" });
+    }
+  })
+  .describe(
+    "How to resolve a conflict: {resolution: 'wait'} queues behind it, {resolution: 'skip'} starts nothing, {resolution: 'join', sessionId} adds to that session, {resolution: 'force', reason} starts anyway.",
+  );
+
+function conflictDecision(input: z.infer<typeof ConflictInput>): ConflictDecision {
+  switch (input.resolution) {
+    case "wait":
+      return { resolution: "wait", ...(input.behindId ? { behindId: input.behindId } : {}) };
+    case "skip":
+      return { resolution: "skip" };
+    case "join":
+      if (!input.sessionId) throw new ToolError("join needs the sessionId of the existing session");
+      return { resolution: "join", sessionId: input.sessionId };
+    case "force":
+      if (!input.reason) throw new ToolError("force needs a reason");
+      return { resolution: "force", reason: input.reason };
+  }
+}
 
 /** `list_sessions` (§8.4, always loaded): the project's agent sessions. */
 export const listSessions = defineTool({
@@ -74,7 +125,7 @@ export const startSession = defineTool({
     provider: ProviderId.optional(),
     model: z.string().min(1).optional(),
     effort: ReasoningEffort.optional(),
-    conflict: ConflictDecision.optional(),
+    conflict: ConflictInput.optional(),
     reportTo: z
       .enum(["orchestrator"])
       .optional()
@@ -115,7 +166,7 @@ export const startSession = defineTool({
       // The brief is the session's first message: no sender line, but the transcript shows
       // it as the PM's.
       input: { text: input.prompt, from: "pm" },
-      conflict: input.conflict,
+      conflict: input.conflict ? conflictDecision(input.conflict) : undefined,
     });
     const result = await services.sessions.start(req);
     switch (result.status) {
