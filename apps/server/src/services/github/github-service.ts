@@ -10,6 +10,7 @@ import {
   type GithubPrDetails,
   type GithubPrDiff,
   type GithubPrsResponse,
+  type GithubSyncStatus,
   type MergePrRequest,
   type MergePrResponse,
   PrMergeState,
@@ -26,6 +27,7 @@ import type { EventStore } from "../../events/store";
 import type { ArtifactService } from "../artifacts";
 import { badRequest, conflict, errorMessage, ServiceError } from "../errors";
 import type { Exec } from "../exec";
+import type { ForgeService } from "../forge/service";
 import type { GitBroker } from "../git-broker";
 import type { InboxService } from "../inbox-service";
 import type { ProjectService } from "../projects/project-service";
@@ -68,14 +70,20 @@ export interface GithubServiceDeps extends RunnerDeps {
   /** Poll intervals (ms): idle (default 60 s) and while a session PR is open (default 15 s). */
   idleIntervalMs?: number;
   activeIntervalMs?: number;
+  /** Forgejo projects' reads and sync (`docs/forges.md` phase A2); absent: they read nothing. */
+  forge?: ForgeService;
   log?: (message: string) => void;
 }
 
 /**
  * GitHub for CodeDen (§9): connection state, issue and PR sync, and the operations agents, PMs
- * and the UI share. Every method that needs GitHub takes a project id and fails with
- * `409 not_a_github_project` for local-only projects and `409 github_not_connected` without a
- * token; list reads never fail for those reasons (they return the projection and the state).
+ * and the UI share. The shared read paths (issue and PR lists, one issue, one PR, a session's
+ * PR) answer for a `kind: "forge"` project through `ForgeService` (`docs/forges.md` phase A2),
+ * so the existing `/api/projects/:id/github/*` routes serve both with one response shape; GitHub
+ * writes still refuse a forge project. Every method that needs GitHub takes a project id and
+ * fails with `409 not_a_github_project` for local-only and forge projects, and
+ * `409 github_not_connected` without a token; list reads never fail for those reasons (they
+ * return the projection and the state).
  */
 export class GithubService {
   readonly auth: GithubAuth;
@@ -144,6 +152,11 @@ export class GithubService {
       if (e.type !== "session.created" && e.type !== "session.updated") continue;
       const { session } = e.payload as { session?: Session };
       if (!session?.projectId || !session.branch || session.pr) continue;
+      const forge = this.forgeFor(session.projectId);
+      if (forge?.hasUnlinkedPr(session.projectId, session.branch)) {
+        forge.soon(session.projectId);
+        continue;
+      }
       if (this.sync.hasUnlinkedPr(session.projectId, session.branch)) {
         this.sync.soon(session.projectId);
       }
@@ -193,6 +206,8 @@ export class GithubService {
     projectId: string,
     opts: { state?: IssueStateFilter; labels?: string[]; limit?: number } = {},
   ): Promise<GithubIssue[]> {
+    const forge = this.forgeFor(projectId);
+    if (forge) return forge.listIssues(projectId, opts);
     this.githubRepo(projectId);
     const all = this.data.issues(
       projectId,
@@ -203,8 +218,10 @@ export class GithubService {
     return all.filter((i) => wanted.every((l) => i.labels.includes(l))).slice(0, opts.limit ?? 100);
   }
 
-  /** One issue, fresh from GitHub, with its latest comments. */
+  /** One issue, fresh from the forge, with its latest comments. */
   getIssue(projectId: string, number: number): Promise<GithubIssueDetails> {
+    const forge = this.forgeFor(projectId);
+    if (forge) return forge.getIssue(projectId, number);
     return issues.getIssueDetails(this.issueDeps(), projectId, this.githubRepo(projectId), number);
   }
 
@@ -235,16 +252,24 @@ export class GithubService {
   // ------------------------------------------------------------ pull requests
 
   listPrs(projectId: string, state: IssueStateFilter = "open", limit = 100): GithubPr[] {
+    const forge = this.forgeFor(projectId);
+    if (forge) return forge.listPrs(projectId, state, limit);
     this.githubRepo(projectId);
     return this.data.prs(projectId, state, limit);
   }
 
-  /** A PR's state, checks, reviews and mergeability; re-read from GitHub unless `cached`. */
+  /** A PR's state, checks, reviews and mergeability; re-read from the forge unless `cached`. */
   async getPrStatus(
     projectId: string,
     number: number,
     opts: { cached?: boolean } = {},
   ): Promise<GithubPr> {
+    const forge = this.forgeFor(projectId);
+    if (forge) {
+      const cached = this.data.pr(projectId, number);
+      if (opts.cached && cached) return cached;
+      return forge.getPr(projectId, number);
+    }
     const repo = this.githubRepo(projectId);
     const cached = this.data.pr(projectId, number);
     if (opts.cached && cached) return cached;
@@ -254,6 +279,8 @@ export class GithubService {
   /** `/api/prs/:id`: status plus body, size and every changed file (without patches). */
   async getPrDetails(prId: string): Promise<GithubPrDetails> {
     const { projectId, number } = this.parsePrId(prId);
+    const forge = this.forgeFor(projectId);
+    if (forge) return forge.getPrDetails(projectId, number);
     const repo = this.githubRepo(projectId);
     const pr = await refreshPr(this.prDeps(), projectId, repo, number);
     const [info, files] = await Promise.all([
@@ -274,6 +301,8 @@ export class GithubService {
   /** `/api/prs/:id/diff`: every changed file with its patch, at the PR's current head. */
   async getPrDiff(prId: string): Promise<GithubPrDiff> {
     const { projectId, number } = this.parsePrId(prId);
+    const forge = this.forgeFor(projectId);
+    if (forge) return forge.getPrDiff(projectId, number);
     const repo = this.githubRepo(projectId);
     const info = await readPrInfo(this.client, repo, number);
     const files = await this.prFiles.get(repo, number, info);
@@ -342,15 +371,15 @@ export class GithubService {
       session.projectId && session.pr
         ? (this.data.pr(session.projectId, session.pr.number) ?? null)
         : null;
-    const local = !session.projectId || this.repoOrNull(session.projectId) === null;
-    const connection: GithubConnection = local
-      ? {
-          connected: false,
-          source: null,
-          login: null,
-          message: "Local-only project: GitHub features are off",
-        }
-      : await this.connection();
+    const project = this.projectOrNull(session.projectId);
+    let connection: GithubConnection;
+    if (project?.kind === "forge" && this.deps.forge) {
+      connection = await this.deps.forge.connection(project);
+    } else if (!project || project.kind === "local" || this.repoOrNull(project.id) === null) {
+      connection = localConnection();
+    } else {
+      connection = await this.connection();
+    }
     return { connection, issue: session.issue, pr };
   }
 
@@ -362,6 +391,9 @@ export class GithubService {
     limit: number,
   ): Promise<GithubIssuesResponse> {
     const project = this.deps.projects.get(projectId);
+    if (project.kind === "forge" && this.deps.forge) {
+      return this.deps.forge.issuesResponse(projectId, state, limit);
+    }
     if (project.kind !== "github") return { connection: localConnection(), sync: null, issues: [] };
     return {
       connection: await this.connection(),
@@ -376,6 +408,9 @@ export class GithubService {
     limit: number,
   ): Promise<GithubPrsResponse> {
     const project = this.deps.projects.get(projectId);
+    if (project.kind === "forge" && this.deps.forge) {
+      return this.deps.forge.prsResponse(projectId, state, limit);
+    }
     if (project.kind !== "github") return { connection: localConnection(), sync: null, prs: [] };
     return {
       connection: await this.connection(),
@@ -386,16 +421,42 @@ export class GithubService {
 
   /** Sync a project now; errors surface (not connected, rate limited). */
   async syncNow(projectId: string): Promise<void> {
+    const forge = this.forgeFor(projectId);
+    if (forge) return forge.syncNow(projectId);
     this.githubRepo(projectId);
     await this.sync.syncProject(projectId);
   }
 
+  /** The poll state of the sync that serves this project. */
+  syncStatus(projectId: string): GithubSyncStatus {
+    const forge = this.forgeFor(projectId);
+    return forge ? forge.syncStatus(projectId) : this.sync.status(projectId);
+  }
+
   // ------------------------------------------------------------ helpers
 
-  /** The GitHub coordinates of a project, or a 409 for local-only projects. */
+  /** The forge service when this project is a forge project, else null. */
+  private forgeFor(projectId: string | null): ForgeService | null {
+    if (!projectId || !this.deps.forge) return null;
+    let project: Project;
+    try {
+      project = this.deps.projects.get(projectId);
+    } catch {
+      return null; // a missing project is reported by the caller's own look-up
+    }
+    return project.kind === "forge" ? this.deps.forge : null;
+  }
+
+  /** The forge coordinates of a project, or a 409 for local-only projects. */
   githubRepo(projectId: string | null): GitHubRepo {
     if (!projectId) throw conflict("This session has no project", "no_project");
     const project: Project = this.deps.projects.get(projectId);
+    if (project.kind === "forge") {
+      throw conflict(
+        `${project.name} is a Forgejo project; that GitHub action is not available yet`,
+        "not_a_github_project",
+      );
+    }
     if (project.kind !== "github") {
       throw conflict(
         `${project.name} is a local-only project; GitHub features are off`,
@@ -408,6 +469,16 @@ export class GithubService {
   private repoOrNull(projectId: string): GitHubRepo | null {
     try {
       return this.githubRepo(projectId);
+    } catch {
+      return null;
+    }
+  }
+
+  /** The project, or null when it no longer exists (a session may outlive its project). */
+  private projectOrNull(projectId: string | null): Project | null {
+    if (!projectId) return null;
+    try {
+      return this.deps.projects.get(projectId);
     } catch {
       return null;
     }

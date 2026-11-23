@@ -20,7 +20,7 @@ import { InboxItem } from "./entities/inbox";
 import { Project } from "./entities/project";
 import { Session } from "./entities/session";
 import { FACTORY_EVENT_PAYLOADS } from "./factory-api";
-import { GITHUB_EVENT_PAYLOADS } from "./github";
+import { FORGE_EVENT_PAYLOADS, GITHUB_EVENT_PAYLOADS } from "./github";
 import { ConflictRecord, Notice } from "./orchestration";
 import { PtyId } from "./runner/commands";
 import { RunnerDeletedPayload, RunnerRecordRef, RunnerRegisteredPayload } from "./runners";
@@ -160,6 +160,9 @@ export const EventEnvelope = z.discriminatedUnion("type", [
   globalEvent("pty.exited", z.object({ ptyId: PtyId, exitCode: z.int().nullable() })),
   // GitHub sync (§9); `sessionId` is the PR's linked session when there is one.
   globalEvent("github.synced", GITHUB_EVENT_PAYLOADS["github.synced"]),
+  // A forge project's first import (`docs/forges.md` §4.4); the rest of its events are the
+  // provider-neutral `issue.*`, `pr.*` and `review.submitted` below.
+  globalEvent("forge.synced", FORGE_EVENT_PAYLOADS["forge.synced"]),
   globalEvent("issue.opened", GITHUB_EVENT_PAYLOADS["issue.opened"]),
   globalEvent("issue.labeled", GITHUB_EVENT_PAYLOADS["issue.labeled"]),
   globalEvent("issue.updated", GITHUB_EVENT_PAYLOADS["issue.updated"]),

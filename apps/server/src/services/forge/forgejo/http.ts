@@ -257,11 +257,11 @@ export class ForgejoHttp {
     }
     if (as === "none" || response.status === 204 || response.status === 205) {
       await response.body?.cancel();
-      if (!response.ok) throw this.errorFor(response.status, "", token);
+      if (!response.ok) throw this.errorFor(response.status, "", token, response.headers);
       return { data: null as T, headers: response.headers, status: response.status };
     }
     const text = await readText(response, this.maxBytes);
-    if (!response.ok) throw this.errorFor(response.status, text, token);
+    if (!response.ok) throw this.errorFor(response.status, text, token, response.headers);
     if (as === "text") {
       return { data: text as T, headers: response.headers, status: response.status };
     }
@@ -274,12 +274,13 @@ export class ForgejoHttp {
     }
   }
 
-  private errorFor(status: number, text: string, token: string): ForgeError {
+  private errorFor(status: number, text: string, token: string, headers?: Headers): ForgeError {
     const detail = apiMessage(text);
     const message = redactToken(
       detail ? `Forgejo: ${detail}` : `Forgejo request failed (HTTP ${status}).`,
       token,
     );
+    const retryAfterMs = retryAfter(headers);
     switch (status) {
       case 401:
         return notConnected();
@@ -295,7 +296,7 @@ export class ForgejoHttp {
       case 422:
         return new ForgeError("forge_validation", message);
       case 429:
-        return new ForgeError("forge_rate_limited", message);
+        return new ForgeError("forge_rate_limited", message, undefined, retryAfterMs);
       default:
         return new ForgeError(
           status === 408 || status >= 500 ? "forge_unavailable" : "forge_validation",
@@ -310,6 +311,16 @@ function notConnected(): ForgeError {
     "forge_not_connected",
     "Forgejo rejected the token. Add a new token in Settings.",
   );
+}
+
+/** A `Retry-After` header (seconds or an HTTP date) in milliseconds, if the forge sent one. */
+function retryAfter(headers: Headers | undefined): number | undefined {
+  const raw = headers?.get("retry-after")?.trim();
+  if (!raw) return undefined;
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds)) return Math.max(0, Math.round(seconds * 1_000));
+  const at = Date.parse(raw);
+  return Number.isFinite(at) ? Math.max(0, at - Date.now()) : undefined;
 }
 
 function isRedirect(status: number): boolean {

@@ -21,9 +21,11 @@ import { type FactoryGithub, GithubFactoryPort } from "./factory/github-port";
 import { FILE_RESET_NOTICES, reportFileReset } from "./file-reset-notice";
 import { ConfigFiles } from "./files/config-files";
 import { ForgejoConnection, type ForgejoConnectionDeps } from "./forge/connection";
+import { ForgeService } from "./forge/service";
 import { createGitBroker, type GitBroker } from "./git-broker";
 import { GithubService, type GithubServiceDeps } from "./github/github-service";
 import { projectTrustedAuthors } from "./github/review-trust";
+import { GithubStore } from "./github/store";
 import { ImageService } from "./images/image-service";
 import { InboxService } from "./inbox-service";
 import { RunFailedSettler } from "./inbox-settle";
@@ -115,7 +117,14 @@ export interface ServicesOptions {
   /** GitHub API transport and poll intervals (tests point them at a fake GitHub). */
   github?: Pick<GithubServiceDeps, "fetch" | "baseUrl" | "idleIntervalMs" | "activeIntervalMs">;
   /** Forgejo connection transport (tests inject a scripted client). */
-  forgejo?: Pick<ForgejoConnectionDeps, "client">;
+  forgejo?: Pick<ForgejoConnectionDeps, "client"> & {
+    /** Transport for the sync's project clients (tests point them at a fake Forgejo). */
+    fetch?: typeof fetch;
+    /** Poll intervals (ms), for tests. */
+    idleIntervalMs?: number;
+    activeIntervalMs?: number;
+    tickMs?: number;
+  };
   /** Automation clock, scheduler timings and file rescans (tests). */
   automations?: Pick<
     AutomationServiceDeps,
@@ -190,6 +199,8 @@ export interface AppServices {
   github: GithubService;
   /** The self-hosted Forgejo connection (`docs/forges.md` §6.1); never exposes its token. */
   forgejo: ForgejoConnection;
+  /** Forgejo projects' read APIs and sync (`docs/forges.md` phase A2). */
+  forge: ForgeService;
   /** Usage and cost reports, budgets and rate limits (§12.6). */
   usage: UsageService;
   /** Automations: definitions, scheduler, runs and issue triage (§10). */
@@ -241,6 +252,20 @@ export function createServices(opts: ServicesOptions): AppServices {
     },
     secrets: opts.secrets,
     ...opts.forgejo,
+    log: opts.log,
+  });
+  // The shared projection store is stateless; one instance per service keeps the wiring plain.
+  const forge = new ForgeService({
+    store: opts.store,
+    data: new GithubStore(opts.db),
+    projects,
+    settings: () => opts.settings.get(),
+    secrets: opts.secrets,
+    connection: forgejo,
+    fetch: opts.forgejo?.fetch,
+    idleIntervalMs: opts.forgejo?.idleIntervalMs,
+    activeIntervalMs: opts.forgejo?.activeIntervalMs,
+    tickMs: opts.forgejo?.tickMs,
     log: opts.log,
   });
   const sessionRepo = new SessionRepo(opts.db, opts.store);
@@ -353,6 +378,7 @@ export function createServices(opts: ServicesOptions): AppServices {
     home: opts.paths.home,
     git: gitBroker,
     ...opts.github,
+    forge,
     log: opts.log,
   });
   // The factory and issue triage share it, so both trust the same issue authors.
@@ -537,6 +563,13 @@ export function createServices(opts: ServicesOptions): AppServices {
       settings: () => opts.settings.get(),
       send: (id, input) => sessions.send(id, { input, whenBusy: "queue" }, "codeden"),
       trustedAuthors,
+      projectKind: (projectId) => {
+        try {
+          return projects.get(projectId).kind;
+        } catch {
+          return null;
+        }
+      },
       log: opts.log,
     }),
     providerHistory,
@@ -570,6 +603,7 @@ export function createServices(opts: ServicesOptions): AppServices {
     }),
     github,
     forgejo,
+    forge,
     orchestration,
     automations,
     userHome,

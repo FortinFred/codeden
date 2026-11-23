@@ -30,7 +30,7 @@ export function projectGithubRoutes(s: AppServices) {
     })
     .post("/:id/github/sync", async (c) => {
       await s.github.syncNow(c.req.param("id"));
-      return c.json(s.github.sync.status(c.req.param("id")));
+      return c.json(s.github.syncStatus(c.req.param("id")));
     })
     .post("/:id/github/issues", jsonBody(CreateGithubIssueRequest), async (c) =>
       c.json(await s.github.createIssue(c.req.param("id"), c.req.valid("json")), 201),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   EventEnvelope,
+  FORGE_EVENT_TYPES,
   GITHUB_EVENT_TYPES,
   GithubIssue,
   GithubListQuery,
@@ -147,6 +148,16 @@ describe("github contracts", () => {
   it("parses every GitHub domain event in the envelope union", () => {
     expect(GITHUB_EVENT_TYPES).toContain("pr.checks_failed");
     const base = { seq: 1, sessionId: "s1", ts };
+    // The forge's silent first import has the same payload, under its own name.
+    expect(FORGE_EVENT_TYPES).toEqual(["forge.synced"]);
+    expect(
+      EventEnvelope.parse({
+        ...base,
+        sessionId: null,
+        type: "forge.synced",
+        payload: { projectId: "p1", issues: [issue], prs: [pr] },
+      }).type,
+    ).toBe("forge.synced");
     const parsed = EventEnvelope.parse({ ...base, type: "pr.checks_failed", payload: { pr } });
     expect(parsed.type).toBe("pr.checks_failed");
     expect(

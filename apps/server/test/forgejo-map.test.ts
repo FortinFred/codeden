@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseUnifiedDiff } from "../src/services/forge/forgejo/diff";
 import {
   parseClosingIssues,
+  reviewDecisionFor,
   toForgeIssue,
   toForgePr,
   toForgeReview,
@@ -197,5 +198,48 @@ describe("Forgejo diff parsing", () => {
 
   it("returns nothing for text with no diff headers", () => {
     expect(parseUnifiedDiff("not a diff")).toEqual([]);
+  });
+});
+
+describe("Forgejo review decision", () => {
+  const review = (over: Partial<Parameters<typeof toForgeReview>[0]> = {}) =>
+    toForgeReview({
+      id: 1,
+      user: { login: "lee" },
+      state: "APPROVED",
+      official: true,
+      ...over,
+    });
+
+  it("counts official approvals against branch protection", () => {
+    expect(reviewDecisionFor([], 0)).toBe("none");
+    expect(reviewDecisionFor([], 1)).toBe("review_required");
+    expect(reviewDecisionFor([review()], 1)).toBe("approved");
+    expect(reviewDecisionFor([review({ official: false })], 1)).toBe("review_required");
+    expect(
+      reviewDecisionFor([review({ id: 1 }), review({ id: 2, user: { login: "sam" } })], 2),
+    ).toBe("approved");
+  });
+
+  it("fails closed when the requirement cannot be read", () => {
+    expect(reviewDecisionFor([], null)).toBe("none");
+    expect(reviewDecisionFor([review()], null)).toBe("review_required");
+  });
+
+  it("takes only official, non-stale and non-dismissed reviews into account", () => {
+    expect(reviewDecisionFor([review({ stale: true })], 1)).toBe("review_required");
+    expect(reviewDecisionFor([review({ dismissed: true })], 1)).toBe("review_required");
+    expect(reviewDecisionFor([review({ state: "REQUEST_CHANGES", body: "no" })], 0)).toBe(
+      "changes_requested",
+    );
+    // A later comment by the same author keeps the approval.
+    expect(reviewDecisionFor([review(), review({ id: 2, state: "COMMENT" })], 1)).toBe("approved");
+    // A later approval replaces the author's earlier request for changes.
+    expect(
+      reviewDecisionFor(
+        [review({ id: 1, state: "REQUEST_CHANGES" }), review({ id: 2, state: "APPROVED" })],
+        1,
+      ),
+    ).toBe("approved");
   });
 });

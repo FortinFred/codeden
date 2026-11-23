@@ -8,6 +8,7 @@ import {
   type ForgePullQuery,
   ForgePullQuery as ForgePullQuerySchema,
   type ForgeReview,
+  GithubPr,
   type MergeForgePull,
   type SubmitForgeReview,
   type UpdateForgePull,
@@ -15,7 +16,14 @@ import {
 import { ForgeError } from "../../errors";
 import { type ForgejoContext, mapPull, readPull, readPullFiles, repoPath } from "./context";
 import { parseUnifiedDiff } from "./diff";
-import { toForgePrDetails, toForgePrFile, toForgeReview } from "./map";
+import { commitStatuses, requiredApprovals } from "./git";
+import {
+  EMPTY_CHECKS,
+  reviewDecisionFor,
+  toForgePrDetails,
+  toForgePrFile,
+  toForgeReview,
+} from "./map";
 import { toForgePrRef } from "./map-git";
 import type { ForgejoPull, ForgejoPullCommit, ForgejoReview } from "./types";
 
@@ -42,8 +50,42 @@ export async function listPulls(
 /** A PR's live details, including its changed files (without patches). */
 export async function getPull(context: ForgejoContext, number: number): Promise<ForgePrDetails> {
   const raw = await readPull(context, number);
-  const files = await readPullFiles(context, number);
-  return toForgePrDetails(mapPull(context, raw), raw, files);
+  const [pr, files] = await Promise.all([snapshotOf(context, raw), readPullFiles(context, number)]);
+  return toForgePrDetails(pr, raw, files);
+}
+
+/**
+ * One PR as the sync projects it (`docs/forges.md` §8.1): the row, its head's commit statuses,
+ * its reviews, the computed review decision and its latest commits. Statuses and reviews are
+ * read with the PR, so `pr.checks_*` and `review.submitted` follow from one refresh.
+ */
+export async function prSnapshot(context: ForgejoContext, number: number): Promise<ForgePr> {
+  return snapshotOf(context, await readPull(context, number));
+}
+
+async function snapshotOf(context: ForgejoContext, raw: ForgejoPull): Promise<ForgePr> {
+  const pr = mapPull(context, raw);
+  const [checks, reviews, commits, required] = await Promise.all([
+    raw.head.sha
+      ? commitStatuses(context, raw.head.sha).catch((error: unknown) => {
+          // A head Forgejo does not know has no statuses; anything else must fail the refresh.
+          if (error instanceof ForgeError && error.forgeCode === "forge_not_found") {
+            return EMPTY_CHECKS;
+          }
+          throw error;
+        })
+      : Promise.resolve(EMPTY_CHECKS),
+    listReviews(context, raw.number),
+    pullCommits(context, raw.number),
+    requiredApprovals(context, raw.base.ref),
+  ]);
+  return GithubPr.parse({
+    ...pr,
+    checks,
+    reviews,
+    reviewDecision: reviewDecisionFor(reviews, required),
+    commits,
+  });
 }
 
 /** A PR's changed files across pages (Forgejo's listing carries no patch). */

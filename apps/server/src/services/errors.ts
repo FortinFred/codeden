@@ -54,6 +54,8 @@ export class ForgeError extends ServiceError {
     readonly forgeCode: ForgeErrorCode,
     message: string,
     status: ServiceStatus = FORGE_STATUS[forgeCode],
+    /** A `retry-after` the forge sent (a 429), for the sync's backoff. */
+    readonly retryAfterMs?: number,
   ) {
     super(status, forgeCode, message);
     this.name = "ForgeError";

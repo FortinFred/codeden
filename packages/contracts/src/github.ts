@@ -339,6 +339,23 @@ export const GITHUB_EVENT_PAYLOADS = {
 export type GithubEventType = keyof typeof GITHUB_EVENT_PAYLOADS;
 export const GITHUB_EVENT_TYPES = Object.keys(GITHUB_EVENT_PAYLOADS) as GithubEventType[];
 
+/**
+ * The forge sync's silent first import (`docs/forges.md` §4.4, §8.1). It has exactly the
+ * `github.synced` payload and projects into the same `github_issues` / `github_prs` tables; the
+ * event name keeps GitHub's own import separate, so nothing confuses a Forgejo project with a
+ * GitHub one. The provider-neutral `issue.*`, `pr.*` and `review.submitted` events follow it
+ * unchanged, and `github.synced` stays GitHub-only.
+ */
+export const FORGE_EVENT_PAYLOADS = {
+  "forge.synced": z.object({
+    projectId: Id,
+    issues: z.array(GithubIssue),
+    prs: z.array(GithubPr),
+  }),
+} as const;
+export type ForgeEventType = keyof typeof FORGE_EVENT_PAYLOADS;
+export const FORGE_EVENT_TYPES = Object.keys(FORGE_EVENT_PAYLOADS) as ForgeEventType[];
+
 // ---------------------------------------------------------------- HTTP shapes
 
 export const GithubListQuery = z.object({

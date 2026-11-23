@@ -425,7 +425,7 @@ is the intended fail-closed behaviour, not a bug.
 | Issue detail | `GET /repos/{owner}/{repo}/issues/{index}` | `html_url`, `state`, `labels[].name`, `user.login`, `body`, `comments`, timestamps |
 | Create issue | `POST /repos/{owner}/{repo}/issues` | **`labels` are IDs, not names.** Resolve names with `GET /labels` first; unknown names are dropped and logged. Body and title map directly |
 | Comment | `POST /repos/{owner}/{repo}/issues/{index}/comments` | Same endpoint for issues and PR conversations. CodeDen's hidden `<!-- codeden -->` marker is stored in the body and stripped for display, as on GitHub |
-| Read comments | `GET /repos/{owner}/{repo}/issues/{index}/comments?since=&page=&limit=50` | `since` for the incremental read; comments have `id`, `user.login`, `body`, `created_at`, `html_url` |
+| Read comments | `GET /repos/{owner}/{repo}/issues/{index}/comments?since=&before=` | `since`/`before` only (Forgejo 17's schema has no `page`/`limit`); the client reads once and applies the cap locally. Comments have `id`, `user.login`, `body`, `created_at`, `html_url` |
 | Add labels | `POST /repos/{owner}/{repo}/issues/{index}/labels` with `{ labels: ["name", …] }` | Names or IDs; **unknown names are silently ignored**. Read the issue back (as today) so the projection says what actually applied |
 | Remove labels | `DELETE /repos/{owner}/{repo}/issues/{index}/labels/{identifier}` | `identifier` is a name or ID; a 404 is treated as "already absent", as today |
 | Replace labels | `PUT /repos/{owner}/{repo}/issues/{index}/labels` | Not needed by the current flows; available if a later triage mode wants it |

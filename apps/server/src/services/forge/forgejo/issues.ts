@@ -26,6 +26,32 @@ import type { ForgejoComment, ForgejoIssue, ForgejoLabel } from "./types";
  * is not "completed".
  */
 
+/** What the sync asks of the issue listing: a state, an `updated` cursor and a hard cap. */
+export interface ForgejoIssueListQuery {
+  state: "open" | "closed" | "all";
+  /** RFC 3339; Forgejo filters on `updated_at` at or after this instant. */
+  since?: string;
+  /** `recentupdate` lists the most recently updated first (the incremental sync's order). */
+  sort?: "recentupdate";
+  /** Maximum rows across pages. */
+  limit?: number;
+}
+
+/**
+ * Raw rows of `GET /issues`, pull request rows included. The sync's baseline and cursor need
+ * them to tell a PR's number from an issue's; `listIssues` filters the PR rows out.
+ */
+export function listIssueRows(
+  context: ForgejoContext,
+  query: ForgejoIssueListQuery,
+): Promise<ForgejoIssue[]> {
+  return context.http.paginate<ForgejoIssue>(
+    `${repoPath(context)}/issues`,
+    { state: query.state, since: query.since, sort: query.sort },
+    { limit: query.limit ?? 500 },
+  );
+}
+
 /** List issues (pull requests are filtered out), across pages, up to the query's limit. */
 export async function listIssues(
   context: ForgejoContext,

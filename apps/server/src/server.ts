@@ -126,8 +126,8 @@ export interface StartServerOptions {
    * background polling (default on unless `CODEDEN_GITHUB_SYNC=0`).
    */
   github?: ServicesOptions["github"] & { sync?: boolean };
-  /** Forgejo connection transport (tests inject a scripted client). */
-  forgejo?: ServicesOptions["forgejo"];
+  /** Forgejo connection and sync transport (tests inject a scripted client and a fake transport). */
+  forgejo?: ServicesOptions["forgejo"] & { sync?: boolean };
   /** Automations (§10): clock, scheduler timings and file rescans for tests. */
   automations?: ServicesOptions["automations"];
   /** Factory loop (§10.1): tick interval, background ticking, a scripted GitHub for tests. */
@@ -274,6 +274,7 @@ export async function startServer(opts: StartServerOptions): Promise<RunningServ
   services.lifecycle.start();
   services.orchestration.start();
   services.github.start({ sync: opts.github?.sync ?? process.env.CODEDEN_GITHUB_SYNC !== "0" });
+  services.forge.start({ sync: opts.forgejo?.sync ?? process.env.CODEDEN_FORGE_SYNC !== "0" });
   // A folder may have gained a git checkout or a GitHub remote while CodeDen was away.
   services.redetector.start();
   services.usage.start();
@@ -434,6 +435,7 @@ export async function startServer(opts: StartServerOptions): Promise<RunningServ
       services.lifecycle.stop();
       services.orchestration.stop();
       services.github.stop();
+      services.forge.stop();
       // Its git checks run in project folders: waited for below, before the database closes.
       const redetectorStopped = services.redetector.stop();
       services.usage.stop();

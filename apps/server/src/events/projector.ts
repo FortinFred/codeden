@@ -12,6 +12,7 @@ import {
 import { applyFactoryProjection } from "../services/factory/projection";
 import {
   applyGithubProjection,
+  forgeRepoChanged,
   githubRepoChanged,
   resetGithubProjection,
 } from "../services/github/projection";
@@ -40,12 +41,13 @@ export function applyProjection(tx: Tx, e: EventEnvelope): NewEvent[] {
     case "project.updated": {
       const { project } = e.payload;
       const before = tx
-        .select({ github: projects.github })
+        .select({ github: projects.github, forge: projects.forge })
         .from(projects)
         .where(eq(projects.id, project.id))
         .get();
       // Another repository behind the project: its old issues and PRs don't belong to it.
-      if (githubRepoChanged(before, project)) resetGithubProjection(tx, project.id);
+      if (githubRepoChanged(before, project) || forgeRepoChanged(before, project))
+        resetGithubProjection(tx, project.id);
       const row = projectToRow(project);
       tx.insert(projects).values(row).onConflictDoUpdate({ target: projects.id, set: row }).run();
       return [];
@@ -112,6 +114,7 @@ export function applyProjection(tx: Tx, e: EventEnvelope): NewEvent[] {
       applyOrchestrationProjection(tx, e);
       return [];
     case "github.synced":
+    case "forge.synced":
     case "issue.opened":
     case "issue.labeled":
     case "issue.updated":
