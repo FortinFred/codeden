@@ -7,7 +7,9 @@ import { SPOT_CHECKS_ANCHOR } from "@/components/factory/spot-checks";
 import { ChecksBadge, ReviewDecisionBadge } from "@/components/github/github-bits";
 import { Button } from "@/components/ui/button";
 import { useClient } from "@/lib/api";
+import { isReadOnlyForge, projectForgeName } from "@/lib/forge";
 import { platform } from "@/lib/platform";
+import { useProject } from "@/lib/queries";
 import { useLayoutStore } from "@/stores/layout";
 import { RunFailedActions } from "./run-failed-actions";
 
@@ -44,6 +46,10 @@ export function InboxActions({ item }: { item: InboxItem }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const openTab = useLayoutStore((s) => s.openRightTab);
+  // A forge PR is read-only until phase B (`docs/forges.md` §4.5): no merge from here.
+  const project = useProject(item.projectId);
+  const forge = project ? projectForgeName(project) : "GitHub";
+  const readOnly = isReadOnlyForge(project);
   const fail = (e: Error) => toast.error("Couldn't update the item", { description: e.message });
   const dismiss = useMutation({
     mutationFn: () => client.resolveInbox(item.id, { status: "dismissed" }),
@@ -121,9 +127,11 @@ export function InboxActions({ item }: { item: InboxItem }) {
       };
       return (
         <>
-          <Button size="sm" onClick={() => merge.mutate()} disabled={busy || !prIdOf(item)}>
-            <GitMerge /> {merge.isPending ? "Merging…" : "Merge"}
-          </Button>
+          {!readOnly && (
+            <Button size="sm" onClick={() => merge.mutate()} disabled={busy || !prIdOf(item)}>
+              <GitMerge /> {merge.isPending ? "Merging…" : "Merge"}
+            </Button>
+          )}
           <Button size="sm" variant="outline" onClick={openPr}>
             <GitPullRequest /> Open PR
           </Button>
@@ -133,7 +141,7 @@ export function InboxActions({ item }: { item: InboxItem }) {
               variant="ghost"
               onClick={() => item.pr && platform.openExternal(item.pr.url)}
             >
-              <ExternalLink /> GitHub
+              <ExternalLink /> {forge}
             </Button>
           )}
         </>

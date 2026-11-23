@@ -14,12 +14,20 @@ import { useResolvedTheme } from "@/stores/theme";
 /** "Expand all" renders every diff at once, so it is offered up to this many files. */
 const EXPAND_ALL_MAX = 100;
 
-/** The PR's "Files changed" page on GitHub. */
+/** The PR's "Files changed" page on its forge. */
 function filesUrl(pr: GithubPrDetails): string {
   return `${pr.url}/files`;
 }
 
-function OpenOnGithub({ pr, label = "Open on GitHub" }: { pr: GithubPrDetails; label?: string }) {
+function OpenOnForge({
+  pr,
+  provider,
+  label = `Open on ${provider}`,
+}: {
+  pr: GithubPrDetails;
+  provider: string;
+  label?: string;
+}) {
   return (
     <Button
       variant="link"
@@ -57,17 +65,20 @@ export function PrFilesToggle({
 }
 
 /**
- * Every changed file of a PR (§12.3); a row expands to the file's diff from GitHub. Patches are
- * fetched once the first file is opened, and again when the PR's head commit moves.
+ * Every changed file of a PR (§12.3); a row expands to the file's diff from the forge. Patches
+ * are fetched once the first file is opened, and again when the PR's head commit moves.
  */
 export function PrFiles({
   pr,
   open,
   onToggle,
+  provider = "GitHub",
 }: {
   pr: GithubPrDetails;
   open: ReadonlySet<string>;
   onToggle: (path: string) => void;
+  /** The forge's name, for the "see the rest" link (`docs/forges.md` phase A2). */
+  provider?: string;
 }) {
   const client = useClient();
   const diff = useQuery({
@@ -97,7 +108,7 @@ export function PrFiles({
                   ) : diff.error ? (
                     <p className="px-3 py-2 text-xs text-status-failed">{diff.error.message}</p>
                   ) : (
-                    <FileDiffBody pr={pr} file={f} diff={byPath.get(f.path)} />
+                    <FileDiffBody pr={pr} provider={provider} file={f} diff={byPath.get(f.path)} />
                   )}
                 </div>
               )}
@@ -110,8 +121,8 @@ export function PrFiles({
       </div>
       {truncated && (
         <p className="flex flex-wrap items-center gap-x-2 text-2xs text-muted-foreground">
-          GitHub lists the first {pr.files.length} of {pr.changedFiles} files.
-          <OpenOnGithub pr={pr} label="See the rest on GitHub" />
+          {provider} lists the first {pr.files.length} of {pr.changedFiles} files.
+          <OpenOnForge pr={pr} provider={provider} label={`See the rest on ${provider}`} />
         </p>
       )}
     </div>
@@ -157,10 +168,13 @@ function FileRow({
 
 function FileDiffBody({
   pr,
+  provider,
   file,
   diff,
 }: {
   pr: GithubPrDetails;
+  /** The forge's name, for the file's fallback link. */
+  provider: string;
   file: GithubPrFile;
   diff: GithubPrDiffFile | undefined;
 }) {
@@ -173,7 +187,7 @@ function FileDiffBody({
         fallback={
           <DiffNote>
             Couldn't render this file's diff.
-            <OpenOnGithub pr={pr} />
+            <OpenOnForge pr={pr} provider={provider} />
           </DiffNote>
         }
       >
@@ -194,11 +208,11 @@ function FileDiffBody({
     ? "This file is no longer in the pull request's latest diff."
     : file.status === "renamed" && file.additions + file.deletions === 0
       ? "Renamed without content changes."
-      : "GitHub shows no diff for this file (binary, empty or too large).";
+      : `${provider} shows no diff for this file (binary, empty or too large).`;
   return (
     <DiffNote>
       {message}
-      {diff && <OpenOnGithub pr={pr} />}
+      {diff && <OpenOnForge pr={pr} provider={provider} />}
     </DiffNote>
   );
 }
