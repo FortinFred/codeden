@@ -1,8 +1,8 @@
 # Issue sources: file-backed issues
 
-> Status: **proposed 2026-11-23**. Design only: no source, schema, migration or UI changes are
+> Status: **approved 2026-11-23**. Design only: no source, schema, migration or UI changes are
 > included, and no changelog fragment (docs-only). The exact `docs/DESIGN.md` wording is in §13
-> and has **not** been applied.
+> and was applied on 2026-11-23.
 
 CodeDen has always taken issues and pull requests from the same place: a GitHub repository, and
 since [forges.md](forges.md) also a self-hosted Forgejo repository. This proposal separates the
@@ -971,17 +971,19 @@ Open questions with a recommended default:
   whole trust and worktree story depends on commits. A plain folder could be a later, separate
   source with a different trust model.
 
-## 13. Proposed `docs/DESIGN.md` wording (not applied)
+## 13. `docs/DESIGN.md` wording (applied 2026-11-23)
 
-These are the edits the owner would approve. They are intentionally small: the source is one
+These edits were applied to `docs/DESIGN.md` in the change that approved this design.
+
+These are the edits the owner approved. They are intentionally small: the source is one
 setting, and `kind` keeps its meaning.
 
 ### 13.1 Status line
 
-Add to the status note at the top of `docs/DESIGN.md`:
+Added to the status note at the top of `docs/DESIGN.md`:
 
-> File-backed issues ([issue-sources.md](issue-sources.md)) were proposed on 2026-11-23; the issue
-> source of a project is independent of its pull request forge.
+> File-backed issues (§3, §9, §10.1, [issue-sources.md](issue-sources.md)) were approved on
+> 2026-11-23; the issue source of a project is independent of its pull request forge.
 
 ### 13.2 §3 locked decisions
 
@@ -1062,8 +1064,8 @@ Add this note under the status block at the top:
   local-only bullet) and §13.4 (the factory paragraph and the trust sentence). Without the
   local-only bullet the document would say a local project has no issues while this design gives
   it some.
-- The status line is a record, not a decision: the design only becomes locked when the owner
-  applies these words.
+- The status line is a record, not a decision: the design is locked because the owner approved
+  it and these words were applied.
 - The setting is additive and defaults to today's behaviour. No project, event or API response
   changes meaning until someone chooses `folder`.
 - The biggest unresolved product question is not technical: a public repository's file backlog is
