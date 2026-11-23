@@ -16,7 +16,7 @@ export function assertCanEnter(
   project: Project,
   opts: { limitsSent: boolean; wasFactory: boolean; limits: FactoryLimits },
 ): void {
-  if (!ctx.github.isGithubProject(project.id)) {
+  if (!ctx.github.isForgeProject(project.id)) {
     throw conflict("The software and dark factory need a GitHub project", "not_a_github_project");
   }
   if (!readVision(project).exists) {

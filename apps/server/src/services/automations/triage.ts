@@ -270,7 +270,7 @@ export class TriageService {
     synced: string | null,
   ): Promise<AuthorTrust> {
     const github = project.kind === "github" ? this.deps.github : null;
-    const viewer = github ? await github.viewerLogin().catch(() => null) : null;
+    const viewer = github ? await github.viewerLogin(project.id).catch(() => null) : null;
     const logins = trustedLogins(project.factoryLimits, viewer);
     if (isTrustedAuthor(synced, logins)) return { trusted: true, author: synced, checked: true };
     if (!github) return { trusted: false, author: synced, checked: false };

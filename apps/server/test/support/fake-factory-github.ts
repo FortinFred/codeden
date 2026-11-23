@@ -107,12 +107,18 @@ export class FakeFactoryGithub implements FactoryGithub {
   ciAfterUpdate: ChecksState = "pending";
   /** What `actionsAvailable` answers. */
   actions: boolean | null = true;
+  /** Whether `attach_evidence` can carry evidence (false for a forge project until phase D). */
+  evidenceAvailable = true;
   /** Issue authors' relation to the repository by issue number (default `none`). */
   associations = new Map<number, GithubAuthorAssociation>();
   private next = 100;
 
-  async viewerLogin(): Promise<string | null> {
+  async viewerLogin(_projectId?: string): Promise<string | null> {
     return this.viewer;
+  }
+
+  evidenceSupported(_projectId: string): boolean {
+    return this.evidenceAvailable;
   }
 
   async issueAuthor(projectId: string, number: number): Promise<IssueAuthor> {
@@ -186,7 +192,7 @@ export class FakeFactoryGithub implements FactoryGithub {
     Object.assign(issue, { state: "closed", closedAt: new Date().toISOString(), stateReason });
   }
 
-  isGithubProject(projectId: string): boolean {
+  isForgeProject(projectId: string): boolean {
     return this.githubProjects.has(projectId);
   }
 

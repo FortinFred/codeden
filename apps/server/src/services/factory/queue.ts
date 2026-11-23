@@ -233,14 +233,11 @@ async function mergeOrUpdate(
   return updateWithMain(ctx, project, loop, item, pr.ref.number, sha, main.behind, why);
 }
 
-/** GitHub's answer when branch protection wants the PR up to date before it merges. */
-const NOT_UP_TO_DATE = /up.to.date|out of date|behind/i;
-
 /**
  * The fast path (`fast-merge.ts`): merge the PR on its own CI unless it has to be re-tested
  * first. `step` when it merged or the merge failed like any other; otherwise why it re-tests.
  * A fast merge GitHub refuses because the PR is behind (branch protection) isn't counted as a
- * refusal: that head takes the strict path.
+ * refusal: that head takes the strict path. A forge's refusal is always counted like any other.
  */
 async function tryFast(
   ctx: FactoryContext,
@@ -284,7 +281,7 @@ async function tryFast(
   // (GitHub still catching up, GitHub not answering, a refusal that being up to date wouldn't
   // change) is handled like any other merge: tried again, and refusals count against the head.
   const said = merged.failed.replace(/[.\s]+$/, "");
-  if (merged.settling || !merged.refusal || !NOT_UP_TO_DATE.test(said))
+  if (merged.settling || !merged.refusal || !merged.upToDate)
     return { step: afterMerge(ctx, loop, item, sha, merged) };
   const at = ctx.now().toISOString();
   ctx.store.updateItem(item.id, (i) => ({

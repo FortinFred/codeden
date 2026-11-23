@@ -188,7 +188,7 @@ function knownIssue(ctx: FactoryContext, projectId: string, number: number): Git
   if (!isFactoryMode(ctx.projects.get(projectId).autonomyMode)) {
     throw conflict("The factory isn't on for this project", "not_a_factory");
   }
-  if (!ctx.github.isGithubProject(projectId)) {
+  if (!ctx.github.isForgeProject(projectId)) {
     throw conflict("Not a GitHub project", "not_a_github_project");
   }
   const issue = ctx.github.issue(projectId, number);

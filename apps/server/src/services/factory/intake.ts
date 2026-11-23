@@ -69,7 +69,7 @@ export async function intakeIssues(
   );
   const ignored = items.filter((i) => i.stage === "ignored");
   if (fresh.length === 0 && ignored.length === 0) return loop;
-  const viewer = await ctx.github.viewerLogin().catch(() => null);
+  const viewer = await ctx.github.viewerLogin(project.id).catch(() => null);
   const trusted = trustedLogins(project.factoryLimits, viewer);
 
   for (const issue of fresh.sort((a, b) => a.number - b.number)) {

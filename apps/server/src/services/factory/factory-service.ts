@@ -337,7 +337,7 @@ export class FactoryService {
   async putVision(projectId: string, contents: string): Promise<VisionResponse> {
     const project = this.deps.projects.get(projectId);
     const saved = writeVision(project, contents);
-    if (project.kind !== "github" || !this.ctx.github.isGithubProject(projectId)) return saved;
+    if (project.kind !== "github" || !this.ctx.github.isForgeProject(projectId)) return saved;
     try {
       const path = project.visionPath.replaceAll("\\", "/").replace(/^\.\//, "");
       const pr = await this.ctx.github.shareVision(projectId, path, saved.contents);

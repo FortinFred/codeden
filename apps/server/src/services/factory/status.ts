@@ -121,7 +121,7 @@ export async function buildStatus(ctx: FactoryContext, projectId: string): Promi
   const spend = budgetSpend(ctx, projectId, localDay(ctx.now()), project.factoryLimits);
   const globalKill = ctx.settings.get().factory.killSwitch;
   const githubLogin = isFactoryMode(project.autonomyMode)
-    ? await ctx.github.viewerLogin().catch(() => null)
+    ? await ctx.github.viewerLogin(projectId).catch(() => null)
     : null;
   return {
     projectId,

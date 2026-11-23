@@ -109,6 +109,7 @@ export async function advanceVerifying(
   const vision = visionOf(project);
   const now = ctx.now();
   const conflicting = pr.mergeable === "conflicting";
+  const evidenceSupported = ctx.github.evidenceSupported(project.id);
   const builder = item.builderSessionId ? ctx.repo.find(item.builderSessionId)?.session : undefined;
   const worktree = builder?.worktreePath ?? null;
   const auditConfigured = Boolean(loop.tuning.auditCommand && worktree);
@@ -121,7 +122,7 @@ export async function advanceVerifying(
   if (auditable && worktree && loop.tuning.auditCommand && !auditCache.has(headKey)) {
     auditCache.set(headKey, await runAudit(ctx, loop.tuning.auditCommand, worktree));
   }
-  const evidence = await gatherEvidence(ctx, project, item, pr, headKey);
+  const evidence = await gatherEvidence(ctx, project, item, pr, headKey, evidenceSupported);
   // An exact revert's automated check stands in for the agent review (`revert.ts`).
   const checked = await checkRevert(ctx, project, item, pr);
   if (!checked) return loop;
@@ -147,6 +148,7 @@ export async function advanceVerifying(
     type: item.type,
     evidence: evidence.screenshots,
     testOutput: evidence.testOutput,
+    evidenceSupported,
     audit: auditCache.get(headKey) ?? null,
     auditConfigured,
     ciTimedOut: !kicking && now.getTime() - Date.parse(head.since) > ctx.ciGraceMs,
@@ -223,6 +225,7 @@ async function gatherEvidence(
   item: FactoryItem,
   pr: FactoryPr,
   headKey: string,
+  evidenceSupported: boolean,
 ): Promise<{ screenshots: boolean | null; testOutput: boolean | null }> {
   // A revert needs neither: its own CI is its evidence (`checks.ts`).
   const revert = item.source === "revert";
@@ -232,6 +235,8 @@ async function gatherEvidence(
   const wantScreens = !revert && paths.some(isUiFile);
   const wantTests = !revert && codeFiles(paths).length > 0 && !hasTestResults(pr.body);
   if (!wantScreens && !wantTests) return { screenshots: null, testOutput: null };
+  // No `attach_evidence` on this forge yet (phase D): nothing to look up, nothing to wait for.
+  if (!evidenceSupported) return { screenshots: false, testOutput: false };
   let found = evidenceCache.get(headKey);
   if (!found || (wantScreens && !found.screenshots) || (wantTests && !found.testOutput)) {
     const looked = await ctx.github

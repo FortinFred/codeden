@@ -99,13 +99,19 @@ export interface IssueAuthor {
 export type Commenter = IssueAuthor;
 
 /**
- * What the factory needs from GitHub (§9), as a port so tests can run the loop against a
- * scripted GitHub. `GithubFactoryPort` implements it over `GithubService`.
+ * What the factory needs from a project's forge (§9, `docs/forges.md` §5.5–5.9), as a port so
+ * tests can run the loop against a scripted one. `GithubFactoryPort` implements it over
+ * `GithubService`; `ForgeFactoryPort` implements it over `ForgeService` for a Forgejo project,
+ * and `ProjectFactoryPort` routes each project to its forge.
  */
 export interface FactoryGithub {
-  isGithubProject(projectId: string): boolean;
-  /** The login of the account CodeDen uses on GitHub (always trusted); null when unknown. */
-  viewerLogin(): Promise<string | null>;
+  /** Whether the factory can work on the project's forge (GitHub, or a connected Forgejo). */
+  isForgeProject(projectId: string): boolean;
+  /**
+   * The login of the account CodeDen uses on the project's forge (always trusted); null when
+   * unknown. On Forgejo it is `GET /user` through the connection, cached by token.
+   */
+  viewerLogin(projectId: string): Promise<string | null>;
   /** An issue's author and their association with the repository (one API call). */
   issueAuthor(projectId: string, number: number): Promise<IssueAuthor>;
   /**
@@ -172,6 +178,11 @@ export interface FactoryGithub {
    */
   actionsAvailable(projectId: string): Promise<boolean | null>;
   /**
+   * Whether `attach_evidence` can put evidence on a PR of this project. False on Forgejo until
+   * its evidence phase: the merge checks then don't require screenshots or wait for test output.
+   */
+  evidenceSupported(projectId: string): boolean;
+  /**
    * Open a PR reverting a squash merge when it is still the head of the default branch;
    * null when main moved on (the loop then asks an agent to write the revert).
    */
@@ -207,7 +218,7 @@ export class GithubFactoryPort implements FactoryGithub {
 
   constructor(private readonly github: GithubService) {}
 
-  async viewerLogin(): Promise<string | null> {
+  async viewerLogin(_projectId: string): Promise<string | null> {
     if (this.login && Date.now() - this.login.at < LOGIN_TTL_MS) return this.login.value;
     const value = await this.github
       .connection()
@@ -235,13 +246,18 @@ export class GithubFactoryPort implements FactoryGithub {
     return commentOps.commenters(this.github, projectId, number, opts.pr);
   }
 
-  isGithubProject(projectId: string): boolean {
+  isForgeProject(projectId: string): boolean {
     try {
       this.github.githubRepo(projectId);
       return true;
     } catch {
       return false;
     }
+  }
+
+  /** GitHub has `attach_evidence` (`codeden/evidence`). */
+  evidenceSupported(_projectId: string): boolean {
+    return true;
   }
 
   async createIssue(projectId: string, req: { title: string; body: string; labels: string[] }) {
@@ -327,7 +343,7 @@ export class GithubFactoryPort implements FactoryGithub {
   ): Promise<PrEvidence> {
     const repo = this.github.githubRepo(projectId);
     const found: PrEvidence = { screenshots: false, testOutput: false };
-    const viewer = (await this.viewerLogin())?.toLowerCase() ?? null;
+    const viewer = (await this.viewerLogin(projectId))?.toLowerCase() ?? null;
     for (const number of [prNumber, ...(issueNumber ? [issueNumber] : [])]) {
       const comments = await this.github.client.run(async (o) =>
         o.paginate(o.rest.issues.listComments, {

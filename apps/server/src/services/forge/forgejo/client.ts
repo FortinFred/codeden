@@ -274,8 +274,8 @@ export class ForgejoClient {
     return mergePull(this.context, number, request);
   }
 
-  /** Update a PR branch after checking its head. */
-  updateBranch(number: number, request: { expectedHeadSha: string }): Promise<void> {
+  /** Update a PR branch after checking its head; the new head is the answer. */
+  updateBranch(number: number, request: { expectedHeadSha: string }): Promise<string> {
     return updateBranch(this.context, number, request);
   }
 

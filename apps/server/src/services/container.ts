@@ -21,6 +21,7 @@ import { type FactoryGithub, GithubFactoryPort } from "./factory/github-port";
 import { FILE_RESET_NOTICES, reportFileReset } from "./file-reset-notice";
 import { ConfigFiles } from "./files/config-files";
 import { ForgejoConnection, type ForgejoConnectionDeps } from "./forge/connection";
+import { ForgeFactoryPort, ProjectFactoryPort } from "./forge/factory-port";
 import { ForgeService } from "./forge/service";
 import { createGitBroker, type GitBroker } from "./git-broker";
 import { GithubService, type GithubServiceDeps } from "./github/github-service";
@@ -385,8 +386,15 @@ export function createServices(opts: ServicesOptions): AppServices {
     forge,
     log: opts.log,
   });
-  // The factory and issue triage share it, so both trust the same issue authors.
-  const factoryGithub = opts.factory?.github ?? new GithubFactoryPort(github);
+  // The factory and issue triage share it, so both trust the same issue authors. Each project
+  // goes to its own forge's port; a forge project never reaches Octokit.
+  const factoryGithub =
+    opts.factory?.github ??
+    new ProjectFactoryPort({
+      projects,
+      github: new GithubFactoryPort(github),
+      forge: new ForgeFactoryPort({ projects, forge, log: opts.log }),
+    });
   const trustedAuthors = projectTrustedAuthors(projects);
   const setup = new SetupService({
     exec,

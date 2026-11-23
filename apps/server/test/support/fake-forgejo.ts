@@ -181,6 +181,32 @@ export class FakeForgejo {
   readonly permissions = new Map<string, "read" | "write" | "admin" | null>();
   /** Approvals branch protection requires per branch; a `null` value answers 403. */
   readonly requiredApprovals = new Map<string, number | null>();
+  /** `has_actions` the repository reports (Actions on or off, `docs/forges.md` §5.7). */
+  hasActions = true;
+  /**
+   * Workflow files the contents API lists (`GET /contents/<dir>`), e.g.
+   * `.forgejo/workflows/ci.yml`. Empty: every workflow directory is a 404.
+   */
+  workflowFiles: string[] = [];
+  /** Commit statuses by commit SHA, for a default branch or a merge commit (the port's checks). */
+  readonly statuses = new Map<string, FakeForgejoStatus[]>();
+  /** Branch heads by name (the default branch starts at `base-sha`). */
+  readonly branchHeads = new Map<string, string>([["main", "base-sha"]]);
+  /** Git commits by SHA (tree and parents), for `revertMatches`. */
+  readonly gitCommits = new Map<string, { message?: string; tree: string; parents: string[] }>();
+  /** What `GET /compare/{base}...{head}` answers; null: nothing behind and no files. */
+  compareResult: {
+    totalCommits: number;
+    files: Array<{ filename: string; previous_filename?: string }>;
+  } | null = null;
+  /** Compare calls, in order (`base...head`). */
+  readonly compares: string[] = [];
+  /** Merge requests, in order, with their bodies. */
+  readonly merges: Array<{ number: number; body: Record<string, unknown> }> = [];
+  /** Update-branch calls, in order (`<number>:<head at the call>`). */
+  readonly updates: string[] = [];
+  /** A merge the fake refuses, whatever the request (a 405 from branch protection, a 409). */
+  refuseMerge: { status: number; message: string } | null = null;
   rateLimited = false;
   private clock = Date.parse("2026-11-01T00:00:00Z");
   private nextNumber = 1;
@@ -278,6 +304,11 @@ export class FakeForgejo {
 
   setStatuses(number: number, statuses: FakeForgejoStatus[]): void {
     this.issue(number).statuses = statuses;
+  }
+
+  /** Commit statuses on any commit (the default branch's head, a merge commit). */
+  setCommitStatuses(sha: string, statuses: FakeForgejoStatus[]): void {
+    this.statuses.set(sha, statuses);
   }
 
   setRequiredApprovals(branch: string, required: number | null): void {
@@ -397,6 +428,18 @@ export class FakeForgejo {
         "x-total-count": String((issue.reviews ?? []).length),
       });
     }
+    match = rest.match(/^\/pulls\/(\d+)\/merge$/);
+    if (match) {
+      return method === "POST"
+        ? this.mergePull(Number(match[1]), bodyOf(body), answer)
+        : answer(405, { message: "method not allowed" });
+    }
+    match = rest.match(/^\/pulls\/(\d+)\/update$/);
+    if (match) {
+      return method === "POST"
+        ? this.updatePullBranch(Number(match[1]), query, answer)
+        : answer(405, { message: "method not allowed" });
+    }
     match = rest.match(/^\/pulls\/(\d+)\/commits$/);
     if (match) {
       const issue = this.issues.get(Number(match[1]));
@@ -414,6 +457,31 @@ export class FakeForgejo {
     }
     match = rest.match(/^\/commits\/([^/]+)\/status$/);
     if (match) return answer(200, this.combinedStatus(decodeURIComponent(match[1] ?? "")));
+    match = rest.match(/^\/compare\/(.+)\.\.\.(.+)$/);
+    if (match) {
+      this.compares.push(
+        `${decodeURIComponent(match[1] ?? "")}...${decodeURIComponent(match[2] ?? "")}`,
+      );
+      const compared = this.compareResult;
+      return answer(200, {
+        total_commits: compared?.totalCommits ?? 0,
+        files: compared?.files ?? [],
+      });
+    }
+    match = rest.match(/^\/git\/commits\/([^/]+)$/);
+    if (match) {
+      const sha = decodeURIComponent(match[1] ?? "");
+      const commit = this.gitCommits.get(sha);
+      if (!commit) return answer(404, notFound());
+      return answer(200, {
+        sha,
+        message: commit.message ?? "",
+        tree: { sha: commit.tree },
+        parents: commit.parents.map((parent) => ({ sha: parent })),
+      });
+    }
+    match = rest.match(/^\/contents\/(.+)$/);
+    if (match) return this.contents(decodeURIComponent(match[1] ?? ""), answer);
     match = rest.match(/^\/branches\/(.+)$/);
     if (match) return this.branch(decodeURIComponent(match[1] ?? ""), answer);
     return answer(404, notFound());
@@ -656,6 +724,75 @@ export class FakeForgejo {
     };
   }
 
+  /**
+   * `POST /pulls/{n}/merge`: squash only by default, pinned to `head_commit_id` when sent. A
+   * moved head is 409 and a refused style, a closed PR or an unmergeable one is 405, as Forgejo
+   * answers. The response is empty; the PR is read back for `merge_commit_sha`.
+   */
+  private mergePull(
+    number: number,
+    body: Record<string, unknown>,
+    answer: (status: number, data: unknown, extra?: Record<string, string>) => Response,
+  ): Response {
+    const issue = this.issues.get(number);
+    if (!issue?.pullRequest) return answer(404, notFound());
+    this.merges.push({ number, body });
+    if (this.refuseMerge)
+      return answer(this.refuseMerge.status, { message: this.refuseMerge.message });
+    const style = String(body.Do ?? "");
+    if (style !== "squash") {
+      return answer(405, { message: `${style || "This"} merges are not allowed` });
+    }
+    if (issue.state === "closed") return answer(405, { message: "the pull request is not open" });
+    const head = typeof body.head_commit_id === "string" ? body.head_commit_id : undefined;
+    if (head && head !== issue.headSha) return answer(409, { message: "head out of date" });
+    if (issue.mergeable === false)
+      return answer(405, { message: "the pull request is not mergeable" });
+    this.touch(number, (row) => {
+      row.merged = true;
+      row.mergedAt = this.tick();
+      row.state = "closed";
+      row.closedAt = row.mergedAt;
+    });
+    return answer(200, null);
+  }
+
+  /**
+   * `POST /pulls/{n}/update?style=merge`: merges the base into the head at once, so the head
+   * moves and its checks start again. Other styles are refused, as Forgejo does.
+   */
+  private updatePullBranch(
+    number: number,
+    query: URLSearchParams,
+    answer: (status: number, data: unknown, extra?: Record<string, string>) => Response,
+  ): Response {
+    const issue = this.issues.get(number);
+    if (!issue?.pullRequest) return answer(404, notFound());
+    if ((query.get("style") ?? "merge") !== "merge") {
+      return answer(405, { message: "this update style is not allowed" });
+    }
+    this.updates.push(`${number}:${issue.headSha}`);
+    this.touch(number, (row) => {
+      row.headSha = `${row.headSha}-u${this.updates.length}`;
+      row.mergeable = true;
+    });
+    return answer(200, null);
+  }
+
+  /** A workflow directory's files (`GET /contents/<dir>`); a missing directory is 404. */
+  private contents(
+    path: string,
+    answer: (status: number, data: unknown, extra?: Record<string, string>) => Response,
+  ): Response {
+    const clean = path.replace(/\/+$/, "");
+    const files = this.workflowFiles.filter((file) => file.startsWith(`${clean}/`));
+    if (files.length === 0) return answer(404, notFound());
+    return answer(
+      200,
+      files.map((file) => ({ name: file.slice(clean.length + 1), path: file, type: "file" })),
+    );
+  }
+
   private branch(
     name: string,
     answer: (status: number, data: unknown, extra?: Record<string, string>) => Response,
@@ -666,7 +803,7 @@ export class FakeForgejo {
     const required = this.requiredApprovals.get(name) ?? 0;
     return answer(200, {
       name,
-      commit: { id: "base-sha" },
+      commit: { id: this.branchHeads.get(name) ?? "base-sha" },
       protected: required > 0,
       required_approvals: required,
     });
@@ -679,7 +816,7 @@ export class FakeForgejo {
       default_branch: "main",
       has_issues: true,
       has_pull_requests: true,
-      has_actions: true,
+      has_actions: this.hasActions,
       allow_squash_merge: true,
       permissions: { admin: false, push: true, pull: true },
       owner: { login: this.owner },
@@ -760,7 +897,7 @@ export class FakeForgejo {
 
   private combinedStatus(sha: string) {
     const pr = [...this.issues.values()].find((issue) => issue.headSha === sha);
-    const statuses = pr?.statuses ?? [];
+    const statuses = this.statuses.get(sha) ?? pr?.statuses ?? [];
     return {
       state: combinedState(statuses),
       sha,
