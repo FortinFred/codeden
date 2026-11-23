@@ -1,0 +1,5 @@
+---
+section: added
+---
+
+- **The software factory can run on a self-hosted Forgejo project.** A forge project whose Forgejo connection is configured now works with the same factory loop, merge checks, merge queue and trust rules as a GitHub project, opt-in and capability-gated. CodeDen reads commit statuses (a warning or an error is red, and a head with no statuses is never green), merges a pull request pinned to the head the approval covers (a moved head or a refused merge style is a refusal the queue counts), brings a pull request up to date with the default branch, and takes trust from each author's live collaborator permission, a review's `official` flag, the account CodeDen reads the forge with, or the project's trusted authors. CI that cannot run is reported instead of waiting, and a forge project whose connection is gone stops merging and trusting. Evidence attachments and the vision pull request still follow in a later phase, so a forge pull request merges without the screenshot check and takes its test results from the description; reverts are written by an agent because Forgejo has no revert API.

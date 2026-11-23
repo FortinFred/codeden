@@ -1,5 +1,5 @@
 import type { FactoryItem, FactoryLoop, GitHubPrRef, MergePath, Project } from "@codeden/contracts";
-import { errorMessage, ServiceError } from "../errors";
+import { errorMessage, ForgeError, ServiceError } from "../errors";
 import { type FactoryContext, factoryNotice, raiseInbox } from "./context";
 import { followUpsAtMerge } from "./follow-ups";
 import type { FactoryPr } from "./github-port";
@@ -158,13 +158,31 @@ const REFUSAL_CODES = new Set([
 ]);
 
 /**
- * Whether GitHub answered and refused the request, as opposed to not answering properly: a
- * rate limit, a 5xx or network failure, or GitHub not being connected. Only refusals count
- * against a PR in the merge queue; the rest is tried again on the next tick.
+ * A forge's refusals to merge or update (`docs/forges.md` §6.3): 405 for a style the repository
+ * does not allow or a PR that is not mergeable, 409 for a head that moved or a conflict, 422 for
+ * a request the forge rejects. A 403 is a permission refusal, as GitHub's is. A rate limit, a
+ * 5xx, a timeout or no connection is not a refusal: it is tried again.
+ */
+const FORGE_REFUSAL_CODES = new Set([
+  "forge_not_allowed",
+  "forge_conflict",
+  "forge_validation",
+  "forge_forbidden",
+]);
+
+/**
+ * Whether the forge answered and refused the request, as opposed to not answering properly: a
+ * rate limit, a 5xx or network failure, or the forge not being connected. Only refusals count
+ * against a PR in the merge queue; the rest is tried again on the next tick. A Forgejo refusal
+ * (`ForgeError`) counts exactly like GitHub's, so a moved head or a refused style leaves the
+ * queue rather than being retried until it works by accident.
  */
 export function githubRefused(error: unknown): boolean {
   if (baseJustMoved(error)) return false;
-  return error instanceof ServiceError && REFUSAL_CODES.has(error.code);
+  return (
+    error instanceof ServiceError &&
+    (REFUSAL_CODES.has(error.code) || FORGE_REFUSAL_CODES.has(error.code))
+  );
 }
 
 /** GitHub's answer to a merge sent while it still works out the PR against a base that moved. */
@@ -179,6 +197,22 @@ export function baseJustMoved(error: unknown): boolean {
   return BASE_MOVED.test(errorMessage(error));
 }
 
+/** GitHub's answer when branch protection wants the PR up to date before it merges. */
+const NOT_UP_TO_DATE = /up.to.date|out of date|behind/i;
+
+/**
+ * Whether a refusal was GitHub's branch-protection "up to date" one: that head takes the strict
+ * path instead of counting a refusal. A Forgejo refusal is never classified by its wording: its
+ * 409 "head out of date" means the reviewed head moved, and the queue counts that refusal.
+ */
+function notUpToDateRefusal(error: unknown): boolean {
+  return (
+    error instanceof ServiceError &&
+    !(error instanceof ForgeError) &&
+    NOT_UP_TO_DATE.test(errorMessage(error))
+  );
+}
+
 /**
  * `merged_after_<itemId>`: that item's merge was still being watched (CI on the default branch
  * not finished) when this one merged, so this one stacked on an unverified main (`progress.ts`).
@@ -186,13 +220,15 @@ export function baseJustMoved(error: unknown): boolean {
 export const MERGED_AFTER = "merged_after_";
 
 /**
- * What GitHub said when it didn't merge a queued PR; `refusal` when it refused it, `settling`
+ * What the forge said when it didn't merge a queued PR; `refusal` when it refused it, `settling`
  * when it only hasn't caught up with the default branch moving (`baseJustMoved`).
  */
 export interface MergeFailed {
   failed: string;
   refusal: boolean;
   settling: boolean;
+  /** GitHub refused only because branch protection wants the PR up to date (`queue.ts`). */
+  upToDate?: boolean;
 }
 
 /**
@@ -217,12 +253,18 @@ export async function autoMerge(
       error: errorMessage(error),
       refusal: githubRefused(error),
       settling: baseJustMoved(error),
+      upToDate: notUpToDateRefusal(error),
     }));
   if (!res.merged) {
     // A 200 with `merged: false` is GitHub's own answer.
     if (!("error" in res))
       return { failed: "GitHub did not merge it", refusal: true, settling: false };
-    return { failed: res.error, refusal: res.refusal, settling: res.settling };
+    return {
+      failed: res.error,
+      refusal: res.refusal,
+      settling: res.settling,
+      upToDate: res.upToDate,
+    };
   }
   const at = ctx.now().toISOString();
   // Merges whose CI on main is still running: a failure is theirs to answer first.

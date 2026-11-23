@@ -42,10 +42,10 @@ export async function untrustedCommenters(
     ...(item.issue ? [{ number: item.issue.number, pr: false }] : []),
     ...(item.pr ? [{ number: item.pr.number, pr: true }] : []),
   ];
-  if (targets.length === 0 || !ctx.github.isGithubProject(item.projectId)) return [];
+  if (targets.length === 0 || !ctx.github.isForgeProject(item.projectId)) return [];
   try {
     const limits = ctx.projects.get(item.projectId).factoryLimits;
-    const trusted = trustedLogins(limits, await ctx.github.viewerLogin());
+    const trusted = trustedLogins(limits, await ctx.github.viewerLogin(item.projectId));
     const found = new Map<string, Set<number>>();
     for (const { number, pr } of targets) {
       for (const c of await ctx.github.commenters(item.projectId, number, { pr })) {

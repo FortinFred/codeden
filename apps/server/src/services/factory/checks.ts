@@ -44,6 +44,12 @@ export interface CheckInputs {
   evidence: boolean | null;
   /** Test output attached with `attach_evidence`; null when not looked up. */
   testOutput: boolean | null;
+  /**
+   * Whether the project's forge can take evidence at all (`attach_evidence`). False on Forgejo
+   * until its evidence phase: the screenshot check is skipped and test results must come from
+   * the PR description, never from an attachment nobody can make.
+   */
+  evidenceSupported?: boolean;
   /** Result of the configured audit command; null while not run (or not configured). */
   audit: { ok: boolean; detail: string } | null;
   auditConfigured: boolean;
@@ -261,6 +267,7 @@ export function evaluateChecks(i: CheckInputs): { checks: MergeCheck[]; outcome:
     );
 
   const ci = out.get("ci")?.state;
+  const evidenceSupported = i.evidenceSupported ?? true;
   if (i.revert) {
     // The revert restores code CI passed before: its own CI run is the evidence.
     const evidence = "A revert: its own CI run is the test evidence";
@@ -273,6 +280,9 @@ export function evaluateChecks(i: CheckInputs): { checks: MergeCheck[]; outcome:
   else if (i.testOutput === true) set("test_results", "pass", "Test output attached");
   else if (code.length === 0) set("test_results", "skipped", "No code changed");
   else if (i.testOutput === null) set("test_results", "pending", "Checking for test results");
+  else if (!evidenceSupported)
+    // No attachment is possible on this forge yet: the PR description is the only place left.
+    set("test_results", "fail", "No test results: add a `## Test results` section to the PR");
   else
     set(
       "test_results",
@@ -311,6 +321,13 @@ export function evaluateChecks(i: CheckInputs): { checks: MergeCheck[]; outcome:
   if (ui.length === 0) set("ui_evidence", "skipped", "No UI files changed");
   else if (i.revert)
     set("ui_evidence", "skipped", "A revert: it restores UI that was reviewed with screenshots");
+  else if (!evidenceSupported)
+    // Evidence is phase D on this forge: nothing can be attached yet, so nothing is required.
+    set(
+      "ui_evidence",
+      "skipped",
+      "Evidence is not available on this forge yet, so no screenshots are required",
+    );
   else if (i.evidence === true) set("ui_evidence", "pass", "Screenshots attached");
   else if (i.evidence === null) set("ui_evidence", "pending", "Checking for screenshots");
   else

@@ -195,14 +195,16 @@ export async function mergePull(
 }
 
 /**
- * Bring a PR up to date with its base. Forgejo has no `expected_head_sha`, so the head is
- * checked first and the call is refused when it moved.
+ * Bring a PR up to date with its base and report the new head. Forgejo has no
+ * `expected_head_sha`, so the head is checked first and the call is refused when it moved; the
+ * branch is updated at once, so reading it back says what the next approval and `diffKey`
+ * checks see (§5.5, §6.3).
  */
 export async function updateBranch(
   context: ForgejoContext,
   number: number,
   request: { expectedHeadSha: string },
-): Promise<void> {
+): Promise<string> {
   const raw = await readPull(context, number);
   if (raw.head.sha !== request.expectedHeadSha) {
     throw new ForgeError(
@@ -215,6 +217,8 @@ export async function updateBranch(
     query: { style: "merge" },
     as: "none",
   });
+  const after = await readPull(context, number);
+  return after.head.sha;
 }
 
 /** Comment on a PR, then close it. */

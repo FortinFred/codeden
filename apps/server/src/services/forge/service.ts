@@ -70,9 +70,14 @@ export interface ForgeServiceDeps extends RunnerDeps {
  */
 export class ForgeService {
   readonly sync: ForgejoSync;
+  /** The shared issue/PR projections (the same tables GitHub writes). */
+  readonly data: GithubStore;
   private readonly clients = new Map<string, { key: string; client: ForgejoClient }>();
+  private readonly deps: ForgeServiceDeps;
 
-  constructor(private readonly deps: ForgeServiceDeps) {
+  constructor(deps: ForgeServiceDeps) {
+    this.deps = deps;
+    this.data = deps.data;
     this.sync = new ForgejoSync({
       clientFor: (project) => this.clientFor(project),
       store: deps.data,
@@ -117,6 +122,42 @@ export class ForgeService {
       provider: status.provider,
       host: status.host,
     };
+  }
+
+  /**
+   * The token account's login (`GET /user`), cached by the connection until its token or base
+   * URL changes; null when the token cannot read an account or Forgejo is not connected.
+   */
+  async viewerLogin(): Promise<string | null> {
+    try {
+      const status = await this.deps.connection.status();
+      return status.connected ? status.login : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Whether the factory can work on the project: a forge project whose Forgejo connection is
+   * configured. A removed connection or token fails closed at the calls that need the forge.
+   */
+  connected(projectId: string): boolean {
+    let project: Project;
+    try {
+      project = this.deps.projects.get(projectId);
+    } catch {
+      return false;
+    }
+    return (
+      project.kind === "forge" &&
+      project.forge.provider === "forgejo" &&
+      this.deps.settings().forges.forgejo !== null
+    );
+  }
+
+  /** The connected client for a project; throws `forge_not_connected` without a connection. */
+  client(projectId: string): ForgejoClient {
+    return this.clientForProject(projectId);
   }
 
   /* ------------------------------------------------------------ issues */

@@ -8,15 +8,16 @@ import { readVision } from "./vision";
 /** Switching modes and the kill switch (§10.1). */
 
 /**
- * The software and dark factory need a GitHub project, a vision file and limits with a daily
- * budget (sent with the switch, or saved while already in a factory mode).
+ * The software and dark factory need a project on a supported forge (GitHub, or a connected
+ * Forgejo), a vision file and limits with a daily budget (sent with the switch, or saved while
+ * already in a factory mode).
  */
 export function assertCanEnter(
   ctx: FactoryContext,
   project: Project,
   opts: { limitsSent: boolean; wasFactory: boolean; limits: FactoryLimits },
 ): void {
-  if (!ctx.github.isGithubProject(project.id)) {
+  if (!ctx.github.isForgeProject(project.id)) {
     throw conflict("The software and dark factory need a GitHub project", "not_a_github_project");
   }
   if (!readVision(project).exists) {
