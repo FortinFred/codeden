@@ -3,6 +3,7 @@ import { AutonomyLevel, Id, ProviderId, ReasoningEffort, Timestamp } from "../co
 import { ProjectExecution } from "../execution";
 import { AutonomyMode, DEFAULT_VISION_PATH, FactoryLimits } from "../factory";
 import { ForgeRepo } from "../forge";
+import { type IssueSourceKind, IssueSourceSettings } from "../issue-sources";
 
 /**
  * Something re-detecting a project's folder found that CodeDen does not apply on its own (§9).
@@ -56,6 +57,13 @@ const projectBase = {
   /** Vision file, relative to the repo root; required for the software and dark factory. */
   visionPath: z.string().min(1).default(DEFAULT_VISION_PATH),
   factoryLimits: FactoryLimits.prefault({}),
+  /**
+   * Where this project's issues come from (`docs/issue-sources.md` §4.1): its forge (the default,
+   * as before this setting existed) or a folder of Markdown files in the repository. `kind`,
+   * `github` and `forge` keep describing the repository and pull requests. Defaults to the forge
+   * with the standard folder so every payload written before the setting existed still parses.
+   */
+  issues: IssueSourceSettings.prefault({}),
   /** Stops this project's factory loop and all its sessions. */
   killSwitch: z.boolean().default(false),
   /** IANA timezone for cron automations; machine timezone when null. */
@@ -149,6 +157,27 @@ export function forgeOf(project: Project): ForgeRepo | null {
 /** True for both forge kinds (`github` and `forge`); what the UI and tools use instead of `kind === "github"`. */
 export function isForgeProject(project: Project): boolean {
   return project.kind === "github" || project.kind === "forge";
+}
+
+/**
+ * Where this project's issues come from (`docs/issue-sources.md` §4.3): `folder` when it has opted
+ * into files, `forge` when it has a GitHub or Forgejo connection to read, and `none` for a local
+ * project left on the default source. UI and tools read this — never `kind` — to decide whether a
+ * project has issues at all.
+ */
+export function issueSourceOf(project: Project): IssueSourceKind {
+  if (project.issues.source === "folder") return "folder";
+  return forgeOf(project) ? "forge" : "none";
+}
+
+/** The repository-relative issue folder for a `folder` source (§4.1); null otherwise. */
+export function issueFolderOf(project: Project): string | null {
+  return issueSourceOf(project) === "folder" ? project.issues.folder : null;
+}
+
+/** True when this project has issues at all: files in its repository, or a forge it can read (§4.3). */
+export function isIssueProject(project: Project): boolean {
+  return issueSourceOf(project) !== "none";
 }
 
 type Orderable = Pick<Project, "id" | "name" | "pinned" | "sortOrder">;

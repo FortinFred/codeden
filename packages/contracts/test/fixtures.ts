@@ -212,6 +212,7 @@ export const sampleProject: Project = {
     mergePolicy: "fast",
     trustedAuthors: [],
   },
+  issues: { source: "forge", folder: ".codeden/issues" },
   killSwitch: false,
   timezone: null,
   agentCiEnv: true,

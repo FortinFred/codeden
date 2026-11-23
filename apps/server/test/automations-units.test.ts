@@ -420,6 +420,7 @@ describe("issue intake ownership (§10.1)", () => {
     autonomy: null,
     autonomyMode,
     visionPath: ".codeden/VISION.md",
+    issues: { source: "forge" as const, folder: ".codeden/issues" },
     factoryLimits: FactoryLimits.parse({}),
     killSwitch: false,
     timezone: null,

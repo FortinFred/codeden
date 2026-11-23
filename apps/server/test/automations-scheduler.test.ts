@@ -24,6 +24,7 @@ const project: Project = {
   autonomy: null,
   autonomyMode: "assisted",
   visionPath: ".codeden/VISION.md",
+  issues: { source: "forge" as const, folder: ".codeden/issues" },
   factoryLimits: {} as Project["factoryLimits"],
   killSwitch: false,
   timezone: "UTC",

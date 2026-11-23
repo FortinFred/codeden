@@ -178,6 +178,7 @@ export function createForgeEnv(): ForgeEnv {
     autonomy: null,
     autonomyMode: "assisted" as const,
     visionPath: ".codeden/VISION.md",
+    issues: { source: "forge" as const, folder: ".codeden/issues" },
     factoryLimits: FactoryLimits.parse({}),
     killSwitch: false,
     timezone: null,

@@ -139,6 +139,7 @@ export function createGithubEnv(opts: GithubEnvOptions = {}): GithubEnv {
     autonomy: null,
     autonomyMode: "assisted" as const,
     visionPath: ".codeden/VISION.md",
+    issues: { source: "forge" as const, folder: ".codeden/issues" },
     factoryLimits: {} as Project["factoryLimits"],
     killSwitch: false,
     timezone: null,

@@ -74,6 +74,7 @@ beforeEach(() => {
           autonomy: null,
           autonomyMode: "assisted",
           visionPath: ".codeden/VISION.md",
+          issues: { source: "forge" as const, folder: ".codeden/issues" },
           factoryLimits: null,
           killSwitch: false,
           timezone: null,

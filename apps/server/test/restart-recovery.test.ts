@@ -126,6 +126,7 @@ it("keeps a PM turn the user started through a server-only restart (#137)", asyn
     autonomy: null,
     autonomyMode: "assisted",
     visionPath: ".codeden/VISION.md",
+    issues: { source: "forge" as const, folder: ".codeden/issues" },
     factoryLimits: FactoryLimits.parse({}),
     killSwitch: false,
     timezone: null,

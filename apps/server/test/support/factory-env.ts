@@ -174,6 +174,7 @@ export function createFactoryEnv(
     autonomy: null,
     autonomyMode: "assisted",
     visionPath: ".codeden/VISION.md",
+    issues: { source: "forge" as const, folder: ".codeden/issues" },
     factoryLimits: FactoryLimits.parse({ dailyBudget: { usd: 10 }, ...opts.limits }),
     killSwitch: false,
     timezone: null,

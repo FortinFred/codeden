@@ -28,6 +28,7 @@ function project(
     autonomy: null,
     autonomyMode: "assisted" as const,
     visionPath: ".codeden/VISION.md",
+    issues: { source: "forge" as const, folder: ".codeden/issues" },
     factoryLimits: limits,
     killSwitch: false,
     timezone: null,

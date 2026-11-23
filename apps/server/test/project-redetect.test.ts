@@ -34,6 +34,7 @@ const localProject = {
   autonomy: null,
   autonomyMode: "assisted",
   visionPath: ".codeden/VISION.md",
+  issues: { source: "forge" as const, folder: ".codeden/issues" },
   factoryLimits: {},
   killSwitch: false,
   timezone: null,

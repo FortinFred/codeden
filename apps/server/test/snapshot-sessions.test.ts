@@ -56,6 +56,7 @@ function project(id: string): Project {
     autonomy: null,
     autonomyMode: "assisted",
     visionPath: ".codeden/VISION.md",
+    issues: { source: "forge" as const, folder: ".codeden/issues" },
     factoryLimits: FactoryLimits.parse({}),
     killSwitch: false,
     timezone: null,

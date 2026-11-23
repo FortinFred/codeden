@@ -39,6 +39,7 @@ describe("an automation's last run in the list (#605)", () => {
       autonomy: null,
       autonomyMode: "assisted",
       visionPath: ".codeden/VISION.md",
+      issues: { source: "forge" as const, folder: ".codeden/issues" },
       factoryLimits: FactoryLimits.parse({}),
       killSwitch: false,
       timezone: "UTC",
