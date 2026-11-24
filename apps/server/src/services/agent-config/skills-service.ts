@@ -97,6 +97,10 @@ export class AgentConfigSkills {
     const claude = highestFirst(context.map((f) => readOverrides(f)));
     const codexRules = this.codexRules();
     return skills.map((skill) => {
+      // Copilot CLI has no native skill setting CodeDen writes yet, so its skills stay on.
+      if (skill.provider === "copilot") {
+        return { ...skill, enabled: true, setIn: null };
+      }
       if (skill.provider === "codex") {
         const state = ruleState(codexRules, { name: skill.name, path: skill.file.absolutePath });
         return { ...skill, enabled: state.enabled, setIn: state.set ? this.codexConfig() : null };

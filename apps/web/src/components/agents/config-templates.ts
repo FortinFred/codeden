@@ -16,13 +16,24 @@ export function newConfigLocation(
     const dir =
       provider === "claude"
         ? ".claude/skills"
-        : scope === "user"
-          ? ".codex/skills"
-          : ".agents/skills";
+        : provider === "copilot"
+          ? scope === "user"
+            ? ".copilot/skills"
+            : ".github/skills"
+          : scope === "user"
+            ? ".codex/skills"
+            : ".agents/skills";
     return { root, ...projectPart, path: `${dir}/${name}/SKILL.md` };
   }
-  const dir = provider === "claude" ? ".claude/agents" : ".codex/agents";
-  const ext = provider === "claude" ? "md" : "toml";
+  const dir =
+    provider === "claude"
+      ? ".claude/agents"
+      : provider === "copilot"
+        ? scope === "user"
+          ? ".copilot/agents"
+          : ".github/agents"
+        : ".codex/agents";
+  const ext = provider === "codex" ? "toml" : "md";
   return { root, ...projectPart, path: `${dir}/${name}.${ext}` };
 }
 
@@ -39,6 +50,9 @@ export function newConfigTemplate(
   }
   if (provider === "claude") {
     return `---\nname: ${name}\ndescription: ${desc}\ntools: Read, Grep, Glob\n---\n\nYou are ${name}. Describe how this subagent works and what it returns.\n`;
+  }
+  if (provider === "copilot") {
+    return `---\nname: ${name}\ndescription: ${desc}\ntools: ["read", "edit", "search"]\n---\n\nYou are ${name}. Describe how this custom agent works and what it returns.\n`;
   }
   return `name = "${name}"\ndescription = "${desc.replaceAll('"', '\\"')}"\ndeveloper_instructions = """\nDescribe how this agent works and what it returns.\n"""\n`;
 }

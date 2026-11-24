@@ -35,6 +35,10 @@ const ALLOWED: Record<AgentConfigLocator["root"], RegExp[]> = {
     /^\.codex\/skills\/[^/.][^/]*\/.+$/i,
     /^\.agents\/skills\/[^/.][^/]*\/.+$/i,
     /^\.codex\/agents\/[^/]+\.toml$/i,
+    /^\.copilot\/copilot-instructions\.md$/i,
+    /^\.copilot\/instructions\/.+\.instructions\.md$/i,
+    /^\.copilot\/skills\/[^/.][^/]*\/.+$/i,
+    /^\.copilot\/agents\/.+\.md$/i,
   ],
   project: [
     /^(.+\/)?CLAUDE(\.local)?\.md$/i,
@@ -45,12 +49,17 @@ const ALLOWED: Record<AgentConfigLocator["root"], RegExp[]> = {
     /^(.+\/)?AGENTS(\.override)?\.md$/i,
     /^\.agents\/skills\/[^/.][^/]*\/.+$/i,
     /^\.codex\/agents\/[^/]+\.toml$/i,
+    /^(.+\/)?GEMINI\.md$/i,
+    /^(.+\/)?\.github\/copilot-instructions\.md$/i,
+    /^(.+\/)?\.github\/instructions\/.+\.instructions\.md$/i,
+    /^(.+\/)?\.github\/skills\/[^/.][^/]*\/.+$/i,
+    /^(.+\/)?\.github\/agents\/.+\.md$/i,
   ],
   auto_memory: [/^.+\.md$/i],
 };
 
 /** A skill folder: `<skills root>/<name>` (deleted as a whole). */
-const SKILL_FOLDER = /^(\.claude|\.codex|\.agents)\/skills\/[^/.][^/]*$/i;
+const SKILL_FOLDER = /^(\.claude|\.codex|\.copilot|\.agents|\.github)\/skills\/[^/.][^/]*$/i;
 
 const sha256 = (data: Buffer | string) => createHash("sha256").update(data).digest("hex");
 

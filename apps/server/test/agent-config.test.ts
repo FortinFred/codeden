@@ -12,9 +12,10 @@ import {
   McpServerWriteResponse,
 } from "@codeden/contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { loadedClaude, loadedCodex } from "../src/services/agent-config/catalog";
+import { loadedClaude, loadedCodex, loadedCopilot } from "../src/services/agent-config/catalog";
 import { claudeProjectSlug } from "../src/services/agent-config/paths";
 import { editTomlServer } from "../src/services/agent-config/toml-edit";
+import { sampleSession } from "./helpers";
 import { type Harness, startHarness } from "./support/harness";
 
 function put(path: string, content: string): void {
@@ -103,9 +104,35 @@ describe("agent configuration API", () => {
     );
     put(join(home, ".codex", "AGENTS.md"), "codex user\n");
     put(join(home, ".agents", "skills", "lint", "SKILL.md"), "---\nname: lint\n---\n");
+    put(join(home, ".copilot", "copilot-instructions.md"), "# copilot user\n");
+    put(
+      join(home, ".copilot", "instructions", "typescript.instructions.md"),
+      '---\napplyTo: "**/*.ts"\n---\nUse types.\n',
+    );
+    put(
+      join(home, ".copilot", "skills", "release", "SKILL.md"),
+      "---\nname: release\ndescription: Cut a release\n---\nSteps\n",
+    );
+    put(
+      join(home, ".copilot", "agents", "refactor.md"),
+      "---\nname: refactor\ndescription: Refactors code\n---\n",
+    );
     put(join(home, ".claude.json"), '{\n  "numStartups": 3,\n  "projects": {}\n}');
     put(join(home, ".codex", "config.toml"), CODEX_TOML);
     put(join(h.repo, "CLAUDE.md"), "# project\n");
+    put(join(h.repo, ".github", "copilot-instructions.md"), "# copilot project\n");
+    put(
+      join(h.repo, ".github", "instructions", "api.instructions.md"),
+      '---\napplyTo: "**"\n---\nAPI rules\n',
+    );
+    put(
+      join(h.repo, ".github", "skills", "docs", "SKILL.md"),
+      "---\nname: docs\ndescription: Write docs\n---\n",
+    );
+    put(join(h.repo, ".github", "agents", "planner.md"), "---\nname: planner\n---\n");
+    put(join(h.repo, ".github", "copilot", "settings.json"), "{}\n");
+    put(join(h.repo, "GEMINI.md"), "# gemini\n");
+    put(join(h.repo, "packages", "api", "GEMINI.md"), "# api gemini\n");
     put(join(h.repo, "packages", "api", "CLAUDE.md"), "# api\n");
     put(join(h.repo, "packages", "api", "AGENTS.md"), "# api agents\n");
     put(join(h.repo, "node_modules", "x", "CLAUDE.md"), "# ignored\n");
@@ -134,10 +161,43 @@ describe("agent configuration API", () => {
     expect(find((f) => f.kind === "skill").map((f) => `${f.provider}:${f.name}`)).toEqual([
       "claude:deploy",
       "codex:lint",
+      "copilot:release",
+      "copilot:lint",
+      "copilot:docs",
     ]);
     expect(find((f) => f.kind === "skill")[0]?.description).toBe("Ship the app");
     expect(find((f) => f.kind === "subagent")[0]).toMatchObject({ name: "reviewer" });
-    expect(find((f) => f.onDemand === true).map((f) => f.path)).toEqual(["packages/api/CLAUDE.md"]);
+    expect(
+      find((f) => f.provider === "copilot" && f.kind === "subagent")
+        .map((f) => f.name)
+        .sort(),
+    ).toEqual(["planner", "refactor"]);
+    expect(
+      find((f) => f.provider === "copilot" && f.onDemand === true)
+        .map((f) => f.path)
+        .sort(),
+    ).toEqual(["packages/api/AGENTS.md", "packages/api/CLAUDE.md", "packages/api/GEMINI.md"]);
+    expect(
+      find((f) => f.provider === "copilot" && f.kind === "memory" && f.exists)
+        .map((f) => f.path)
+        .sort(),
+    ).toEqual([
+      ".copilot/copilot-instructions.md",
+      ".github/copilot-instructions.md",
+      "CLAUDE.md",
+      "GEMINI.md",
+      "packages/api/AGENTS.md",
+      "packages/api/CLAUDE.md",
+      "packages/api/GEMINI.md",
+    ]);
+    expect(
+      find((f) => f.provider === "copilot" && f.kind === "rule")
+        .map((f) => f.path)
+        .sort(),
+    ).toEqual([
+      ".copilot/instructions/typescript.instructions.md",
+      ".github/instructions/api.instructions.md",
+    ]);
     expect(find((f) => f.provider === "codex" && f.root === "project").map((f) => f.path)).toEqual([
       "AGENTS.md",
       "packages/api/AGENTS.md",
@@ -204,6 +264,36 @@ describe("agent configuration API", () => {
     expect(del.body).toMatchObject({ deleted: true });
     expect(existsSync(join(h.home, ".claude", "skills", "new-skill"))).toBe(false);
 
+    const copilotSkill = { root: "home", path: ".copilot/skills/quick/SKILL.md" };
+    expect(
+      (
+        await h.api("POST", "/agent-config/file", {
+          ...copilotSkill,
+          content: "---\nname: quick\n---\n",
+        })
+      ).status,
+    ).toBe(200);
+    expect(readFileSync(join(h.home, ".copilot", "skills", "quick", "SKILL.md"), "utf8")).toContain(
+      "name: quick",
+    );
+    const copilotDelete = await h.api(
+      "DELETE",
+      "/agent-config/file?root=home&path=.copilot/skills/quick&folder=1",
+    );
+    expect(copilotDelete.body).toMatchObject({ deleted: true });
+    expect(existsSync(join(h.home, ".copilot", "skills", "quick"))).toBe(false);
+
+    const copilotInstruction = await h.api("PUT", "/agent-config/file", {
+      root: "project",
+      projectId: h.projectId,
+      path: ".github/copilot-instructions.md",
+      content: "# copilot project\nExtra rule\n",
+    });
+    expect(copilotInstruction.status).toBe(200);
+    expect(readFileSync(join(h.repo, ".github", "copilot-instructions.md"), "utf8")).toContain(
+      "Extra rule",
+    );
+
     const mem = await h.api("PUT", "/agent-config/file", {
       root: "auto_memory",
       projectId: h.projectId,
@@ -220,6 +310,8 @@ describe("agent configuration API", () => {
       ".claude/.credentials.json",
       "../x/CLAUDE.md",
       ".ssh/id_rsa",
+      ".copilot/permissions-config.json",
+      ".copilot/hosts.yml",
     ]) {
       const res = await h.api(
         "GET",
@@ -227,6 +319,13 @@ describe("agent configuration API", () => {
       );
       expect(res.status, path).toBe(403);
     }
+    const allowList = await h.api(
+      "GET",
+      `/agent-config/file?root=project&projectId=${h.projectId}&path=${encodeURIComponent(
+        ".github/copilot/settings.json",
+      )}`,
+    );
+    expect(allowList.status).toBe(403);
     const git = await h.api("PUT", "/agent-config/file", {
       root: "project",
       projectId: h.projectId,
@@ -238,6 +337,18 @@ describe("agent configuration API", () => {
 
   it("edits MCP servers in .mcp.json, ~/.claude.json and config.toml, with previews", async () => {
     const spec = { type: "stdio", command: "npx", args: ["-y", "@acme/mcp"], env: { KEY: "v" } };
+    const claudeJsonBefore = readFileSync(join(h.home, ".claude.json"), "utf8");
+    const refused = await h.api("PUT", "/agent-config/mcp", {
+      provider: "copilot",
+      scope: "user",
+      name: "acme",
+      spec,
+    });
+    expect(refused).toMatchObject({
+      status: 400,
+      body: { error: { code: "mcp_unsupported" } },
+    });
+    expect(readFileSync(join(h.home, ".claude.json"), "utf8")).toBe(claudeJsonBefore);
     const project = await h.api("PUT", "/agent-config/mcp", {
       provider: "claude",
       scope: "project",
@@ -389,6 +500,39 @@ describe("agent configuration API", () => {
     expect(loaded.hooks).toBeNull();
   });
 
+  it("reports what a Copilot session loads, with its skills on and no hooks", () => {
+    const cwd = join(h.repo, "packages", "api");
+    h.server.store.append([
+      {
+        type: "session.created",
+        sessionId: "copilot-s",
+        payload: {
+          session: {
+            ...sampleSession,
+            id: "copilot-s",
+            projectId: h.projectId,
+            provider: "copilot",
+            cwd,
+          },
+        },
+      },
+    ]);
+    const loaded = LoadedAgentConfig.parse(h.server.services.agentConfig.loaded("copilot-s"));
+    expect(loaded.provider).toBe("copilot");
+    expect(loaded.hooks).toBeNull();
+    expect(loaded.memory.map((f) => f.path)).toEqual(
+      expect.arrayContaining([
+        ".copilot/copilot-instructions.md",
+        ".github/copilot-instructions.md",
+        "packages/api/AGENTS.md",
+        "packages/api/GEMINI.md",
+      ]),
+    );
+    expect(loaded.skills.map((s) => s.name)).toEqual(["release", "lint", "docs"]);
+    expect(loaded.skills.every((s) => s.enabled && s.setIn === null)).toBe(true);
+    expect(loaded.subagents.map((s) => s.name).sort()).toEqual(["planner", "refactor"]);
+  });
+
   it("applies Claude's and Codex's discovery rules from a working directory", () => {
     const cwd = join(h.repo, "packages", "api");
     const project = { id: h.projectId, path: h.repo, autoMemoryDir: memoryDir };
@@ -406,5 +550,19 @@ describe("agent configuration API", () => {
       join(h.repo, "packages", "api", "AGENTS.md"),
     ]);
     expect(codex.skills.map((s) => s.name)).toEqual(["lint"]);
+
+    const copilot = loadedCopilot(h.home, cwd, h.repo, project);
+    expect(copilot.memory.map((f) => f.absolutePath).filter((p) => p.startsWith(h.home))).toEqual(
+      expect.arrayContaining([
+        join(h.home, ".copilot", "copilot-instructions.md"),
+        join(h.home, ".copilot", "instructions", "typescript.instructions.md"),
+        join(h.repo, ".github", "copilot-instructions.md"),
+        join(h.repo, ".github", "instructions", "api.instructions.md"),
+        join(h.repo, "packages", "api", "AGENTS.md"),
+        join(h.repo, "packages", "api", "GEMINI.md"),
+      ]),
+    );
+    expect(copilot.skills.map((s) => s.name)).toEqual(["release", "lint", "docs"]);
+    expect(copilot.subagents.map((s) => s.name).sort()).toEqual(["planner", "refactor"]);
   });
 });
