@@ -392,6 +392,7 @@ export class AcpSession implements ProviderSession {
   private host(acpSessionId: string | undefined): AcpExtensionHost {
     return extensionHost({
       cwd: this.opts.cwd,
+      extraRoots: this.opts.additionalDirectories,
       broker: this.broker,
       mapper: this.mapperOf(acpSessionId) ?? this.mapper,
       subagents: this.subagents,
@@ -438,6 +439,7 @@ export class AcpSession implements ProviderSession {
     if (message.method === "session/request_permission") {
       const req = message.params as AcpPermissionRequest;
       const ext = this.config.spec.extensions;
+      const host = this.host(sessionIdOf(req));
       return answerPermission(req, {
         broker: this.broker,
         policy: this.policy,
@@ -445,9 +447,8 @@ export class AcpSession implements ProviderSession {
         cwd: this.opts.cwd,
         mcpServers: this.mcpServers,
         trustedServers: this.trusted,
-        ...(ext?.permission
-          ? { own: (call) => ext.permission?.(req, call, this.host(sessionIdOf(req))) }
-          : {}),
+        ...(ext?.permission ? { own: (call) => ext.permission?.(req, call, host) } : {}),
+        ...(ext?.boundary ? { boundary: (call) => ext.boundary?.(req, call, host) } : {}),
       });
     }
     const handled = this.config.spec.extensions?.request?.(

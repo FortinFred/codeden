@@ -2,6 +2,7 @@ import type { ApprovalBroker } from "../approvals";
 import type { ResolvedCommand } from "../util/exec";
 import type { AcpToolFacts, AcpToolState } from "./items";
 import type { AcpEventMapper, ThreadCtx } from "./mapper";
+import type { AcpBoundaryAsk } from "./policy";
 import type {
   AcpInitializeResult,
   AcpPermissionRequest,
@@ -14,6 +15,8 @@ import type { AcpSubagents } from "./subagents";
 /** What a vendor extension can reach in its session. */
 export interface AcpExtensionHost {
   readonly cwd: string;
+  /** The session's extra writable roots (`SessionOptions.additionalDirectories`). */
+  readonly extraRoots: readonly string[];
   readonly broker: ApprovalBroker;
   /** The thread the call came from: the root's, or a subagent's child thread. */
   readonly mapper: AcpEventMapper;
@@ -35,6 +38,7 @@ export interface AcpExtensionHost {
 /** A host from the session's parts; `planning` and `childSessions` are read live. */
 export function extensionHost(parts: {
   cwd: string;
+  extraRoots?: readonly string[];
   broker: ApprovalBroker;
   mapper: AcpEventMapper;
   subagents: AcpSubagents;
@@ -44,6 +48,7 @@ export function extensionHost(parts: {
 }): AcpExtensionHost {
   return {
     cwd: parts.cwd,
+    extraRoots: parts.extraRoots ?? [],
     broker: parts.broker,
     mapper: parts.mapper,
     subagents: parts.subagents,
@@ -84,6 +89,18 @@ export interface AcpExtensions {
     call: AcpToolState,
     host: AcpExtensionHost,
   ): Promise<AcpPermissionResult> | undefined;
+  /**
+   * An ask the agent's own security rules make, which CodeDen's policy would otherwise allow
+   * outright: a path outside the folders it trusts, say. CodeDen judges reads anywhere safe, so
+   * answering from the policy alone would widen what the agent can reach without ever showing
+   * the ask. An ask returned here goes to the user at every level; a policy denial still wins,
+   * and the agent is only ever answered "once" (CodeDen keeps `allow_session` itself).
+   */
+  boundary?(
+    req: AcpPermissionRequest,
+    call: AcpToolState,
+    host: AcpExtensionHost,
+  ): AcpBoundaryAsk | undefined;
   /**
    * Extra `clientCapabilities` fields to advertise in `initialize` (vendor `_meta` flags), e.g.
    * the `subagents` opt-in that makes the agent run subagents as child sessions.
