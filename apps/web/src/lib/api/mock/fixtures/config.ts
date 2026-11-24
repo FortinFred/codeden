@@ -63,9 +63,20 @@ export const configFiles: AgentConfigFile[] = [
     name: "code-reviewer",
     description: "Reviews diffs against acceptance criteria and the project vision",
   }),
-  file("claude", "subagent", "user", "home", ".claude/agents/test-writer.md", {
-    name: "test-writer",
-    description: "Adds focused tests for changed code paths",
+  file("copilot", "memory", "user", "home", ".copilot/copilot-instructions.md"),
+  file("copilot", "memory", "project", "project", ".github/copilot-instructions.md"),
+  file("copilot", "rule", "project", "project", ".github/instructions/tests.instructions.md"),
+  file("copilot", "skill", "project", "project", ".github/skills/release-notes/SKILL.md", {
+    name: "release-notes",
+    description: "Draft release notes from merged PRs and changes/ fragments",
+  }),
+  file("copilot", "subagent", "user", "home", ".copilot/agents/refactor.md", {
+    name: "refactor",
+    description: "Refactors a module without changing its behaviour",
+  }),
+  file("copilot", "subagent", "project", "project", ".github/agents/planner.md", {
+    name: "planner",
+    description: "Breaks a feature into small, reviewable steps",
   }),
 ];
 
@@ -99,6 +110,26 @@ See CLAUDE.md for commands. Additional notes for Codex sessions:
 
 - Run \`pnpm typecheck && pnpm lint\` before finishing.
 - Open draft PRs early and link the issue with \`Fixes #N\`.
+`,
+  ".copilot/copilot-instructions.md": `# Copilot preferences
+
+- Keep replies short and point at the file and line you mean.
+- Ask before running anything that changes the database.
+`,
+  ".github/copilot-instructions.md": `# Storefront Copilot instructions
+
+- Prices are always computed server-side; never trust client totals.
+- TypeScript strict mode, no \`any\` without a comment explaining why.
+- Every user-facing change gets a fragment in \`changes/\`.
+`,
+  ".github/instructions/tests.instructions.md": `---
+applyTo: "**/*.test.ts,**/*.test.tsx"
+---
+
+# Test instructions
+
+- Use Vitest and the existing helpers in \`test/support\`.
+- Wait on a condition; never add a fixed sleep.
 `,
 };
 

@@ -34,7 +34,7 @@ export function NewConfigFileDialog({
   projectId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreated: (file: AgentConfigFileContent) => void;
+  onCreated: (file: AgentConfigFileContent, provider: AgentConfigProvider) => void;
 }) {
   const client = useClient();
   const [provider, setProvider] = useState<AgentConfigProvider>("claude");
@@ -56,7 +56,7 @@ export function NewConfigFileDialog({
       ),
     onSuccess: (res) => {
       toast.success(`Created ${name}`, { description: res.file.absolutePath });
-      onCreated(res.file);
+      onCreated(res.file, provider);
       onOpenChange(false);
       setName("");
       setDescription("");
@@ -81,6 +81,7 @@ export function NewConfigFileDialog({
               options={[
                 { value: "claude", label: "Claude Code" },
                 { value: "codex", label: "Codex" },
+                { value: "copilot", label: "Copilot CLI" },
               ]}
             />
             <Segmented

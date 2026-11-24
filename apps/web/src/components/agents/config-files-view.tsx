@@ -15,13 +15,14 @@ import { NewConfigFileDialog } from "./new-config-file-dialog";
 const PROVIDERS = [
   { id: "claude", label: "Claude Code" },
   { id: "codex", label: "Codex" },
+  { id: "copilot", label: "Copilot CLI" },
 ] as const;
 const scopeOrder = { user: 0, project: 1, local: 2 };
 const scopeTone = { user: "text-chart-2", project: "text-primary", local: "text-chart-4" };
 const scopeLabel = { user: "user", project: "project", local: "local" };
 
-export const fileKey = (f: Pick<AgentConfigFile, "root" | "projectId" | "path">) =>
-  `${f.root}:${f.projectId ?? ""}:${f.path}`;
+export const fileKey = (f: Pick<AgentConfigFile, "provider" | "root" | "projectId" | "path">) =>
+  `${f.provider}:${f.root}:${f.projectId ?? ""}:${f.path}`;
 
 /** Extras a tab adds to a file's row (the Skills tab's switch). */
 export interface RowAddon {
@@ -174,8 +175,8 @@ export function ConfigFilesView({
           projectId={projectId}
           open={creating}
           onOpenChange={setCreating}
-          onCreated={(created) => {
-            open(fileKey(created));
+          onCreated={(created, provider) => {
+            open(fileKey({ ...created, provider }));
             changed();
           }}
         />

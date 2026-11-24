@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AgentConfigFile,
   AgentConfigLocator,
+  AgentConfigProvider,
   AgentSkill,
   AgentSkillListResponse,
   HookChangeRequest,
@@ -203,6 +204,7 @@ describe("agent configuration contracts", () => {
   });
 
   it("round-trips skill states and switches", () => {
+    expect(AgentConfigProvider.options).toEqual(["claude", "codex", "copilot"]);
     const skill = {
       provider: "claude",
       scope: "project",

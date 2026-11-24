@@ -228,6 +228,12 @@ export function sourceFor(
   project: { id: string; path: string } | null,
 ): McpSource {
   const claudeJson = join(home, ".claude.json");
+  if (target.provider === "copilot") {
+    throw badRequest(
+      "Copilot CLI MCP servers are configured in ~/.copilot/mcp-config.json, which CodeDen doesn't edit yet",
+      "mcp_unsupported",
+    );
+  }
   if (target.provider === "codex") {
     if (target.scope !== "user")
       throw badRequest("Codex MCP servers are edited in ~/.codex/config.toml (user scope)");

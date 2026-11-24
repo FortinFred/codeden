@@ -150,8 +150,25 @@ describe("agent configuration helpers", () => {
       root: "home",
       path: ".claude/agents/rev.md",
     });
+    expect(newConfigLocation("skill", "copilot", "user", "release", null)).toEqual({
+      root: "home",
+      path: ".copilot/skills/release/SKILL.md",
+    });
+    expect(newConfigLocation("skill", "copilot", "project", "docs", "p1")).toEqual({
+      root: "project",
+      projectId: "p1",
+      path: ".github/skills/docs/SKILL.md",
+    });
+    expect(newConfigLocation("subagent", "copilot", "project", "planner", "p1")).toEqual({
+      root: "project",
+      projectId: "p1",
+      path: ".github/agents/planner.md",
+    });
     expect(newConfigTemplate("subagent", "codex", "rev", 'Says "hi"')).toContain(
       'description = "Says \\"hi\\""',
+    );
+    expect(newConfigTemplate("subagent", "copilot", "rev", "Reviews code")).toContain(
+      'tools: ["read", "edit", "search"]',
     );
   });
 

@@ -117,16 +117,16 @@ export function skillsIn(
   });
 }
 
-/** Claude subagents (`*.md` with front matter) or Codex agents (`*.toml`) in a folder. */
+/** Claude subagents (`*.md` with front matter) or both other providers' agents (also `*.md`). */
 export function subagentsIn(
   root: ConfigRoot,
   dir: string,
   provider: AgentConfigProvider,
   scope: AgentConfigScope,
 ): AgentConfigFile[] {
-  const files = provider === "claude" ? filesUnder(dir, ".md") : filesUnder(dir, ".toml");
+  const files = provider === "codex" ? filesUnder(dir, ".toml") : filesUnder(dir, ".md");
   return files.map((file) => {
-    const info = provider === "claude" ? frontMatter(file) : tomlInfo(file);
+    const info = provider === "codex" ? tomlInfo(file) : frontMatter(file);
     return fileEntry(root, file, {
       provider,
       kind: "subagent",
@@ -150,10 +150,17 @@ function tomlInfo(file: string): { name?: string; description?: string } {
 
 /**
  * Memory files in subfolders of a checkout (`CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`,
- * `AGENTS.override.md`), skipping dot folders and build output. Bounded in depth and size.
+ * `AGENTS.override.md`, `GEMINI.md`), skipping dot folders and build output. Bounded in depth
+ * and size.
  */
 export function nestedMemoryFiles(projectDir: string): string[] {
-  const wanted = new Set(["claude.md", "claude.local.md", "agents.md", "agents.override.md"]);
+  const wanted = new Set([
+    "claude.md",
+    "claude.local.md",
+    "agents.md",
+    "agents.override.md",
+    "gemini.md",
+  ]);
   const out: string[] = [];
   let visited = 0;
   const walk = (dir: string, depth: number) => {

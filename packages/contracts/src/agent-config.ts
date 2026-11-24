@@ -8,7 +8,7 @@ import { Id, Timestamp } from "./common";
  * `/api/agent-config`.
  */
 
-export const AgentConfigProvider = z.enum(["claude", "codex"]);
+export const AgentConfigProvider = z.enum(["claude", "codex", "copilot"]);
 export type AgentConfigProvider = z.infer<typeof AgentConfigProvider>;
 
 /** Agent-config screens that exist only for some providers. */
@@ -29,6 +29,8 @@ export interface AgentConfigFeatures {
 export const agentConfigFeatures: Record<AgentConfigProvider, AgentConfigFeatures> = {
   claude: { hooks: true, skillSwitches: true },
   codex: { hooks: false, skillSwitches: true },
+  // Copilot CLI has native hooks and a `/skills` toggle, but CodeDen doesn't edit either yet.
+  copilot: { hooks: false, skillSwitches: false },
 };
 
 /** The providers that have a given agent-config feature. */
@@ -36,8 +38,9 @@ export const providersWith = (feature: keyof AgentConfigFeatures): AgentConfigPr
   AgentConfigProvider.options.filter((p) => agentConfigFeatures[p][feature]);
 
 /**
- * - `memory`: CLAUDE.md / CLAUDE.local.md / AGENTS.md files.
- * - `rule`: `.claude/rules/**.md`.
+ * - `memory`: CLAUDE.md / CLAUDE.local.md / AGENTS.md / GEMINI.md and
+ *   `.github/copilot-instructions.md` files.
+ * - `rule`: `.claude/rules/**.md` and Copilot's `*.instructions.md`.
  * - `auto_memory`: files in Claude's auto-memory folder (`MEMORY.md` is the index).
  * - `skill`: a skill's `SKILL.md`. - `subagent`: a subagent definition.
  */
@@ -51,8 +54,8 @@ export type AgentConfigScope = z.infer<typeof AgentConfigScope>;
 /**
  * Where a file lives: `home` (relative to the user's home), `project` (relative to a
  * project's checkout) or `auto_memory` (relative to the project's Claude auto-memory folder).
- * Only known agent-config locations are accepted (CLAUDE.md, AGENTS.md, rules, skills,
- * subagents, auto memory); anything else is refused.
+ * Only known agent-config locations are accepted (CLAUDE.md, AGENTS.md, GEMINI.md, Copilot's
+ * instructions, rules, skills, subagents, auto memory); anything else is refused.
  */
 export const AgentConfigLocator = z.object({
   root: z.enum(["home", "project", "auto_memory"]),

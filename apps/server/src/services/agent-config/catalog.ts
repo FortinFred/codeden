@@ -70,6 +70,24 @@ export function listCodexUser(home: string): AgentConfigFile[] {
   ];
 }
 
+/** Copilot CLI's user-level files: instructions, skills and custom agents. */
+export function listCopilotUser(home: string): AgentConfigFile[] {
+  const r = homeRoot(home);
+  const dir = join(home, ".copilot");
+  const meta = { provider: "copilot", kind: "rule", scope: "user" } as const;
+  return [
+    fileEntry(r, join(dir, "copilot-instructions.md"), {
+      provider: "copilot",
+      kind: "memory",
+      scope: "user",
+    }),
+    ...instructionFiles(join(dir, "instructions")).map((f) => fileEntry(r, f, meta)),
+    ...skillsIn(r, join(dir, "skills"), "copilot", "user").map((s) => s.file),
+    ...skillsIn(r, join(home, ".agents", "skills"), "copilot", "user").map((s) => s.file),
+    ...subagentsIn(r, join(dir, "agents"), "copilot", "user"),
+  ];
+}
+
 /** A project's Claude files: root and nested CLAUDE.md, local file, rules, skills, subagents, auto memory. */
 export function listClaudeProject(p: ProjectRef): AgentConfigFile[] {
   const r = projectRoot(p);
@@ -137,6 +155,35 @@ export function listCodexProject(p: ProjectRef): AgentConfigFile[] {
   ];
 }
 
+/**
+ * A project's Copilot CLI files: `.github/copilot-instructions.md` and modular instructions,
+ * `AGENTS.md` and the other instruction files it reads, skills (its own folder plus the shared
+ * `.claude` and `.agents` ones) and custom agents.
+ */
+export function listCopilotProject(p: ProjectRef): AgentConfigFile[] {
+  const r = projectRoot(p);
+  const meta = (kind: AgentConfigFile["kind"]) =>
+    ({ provider: "copilot", kind, scope: "project" }) as const;
+  const nested = nestedMemoryFiles(p.path).filter((f) =>
+    /^(agents|claude|gemini)\.md$/i.test(basename(f)),
+  );
+  return [
+    fileEntry(r, join(p.path, ".github", "copilot-instructions.md"), meta("memory")),
+    fileEntry(r, join(p.path, "AGENTS.md"), meta("memory")),
+    fileEntry(r, join(p.path, "CLAUDE.md"), meta("memory")),
+    ...existing(r, join(p.path, ".claude", "CLAUDE.md"), meta("memory")),
+    fileEntry(r, join(p.path, "GEMINI.md"), meta("memory")),
+    ...nested.map((f) => fileEntry(r, f, { ...meta("memory"), onDemand: true })),
+    ...instructionFiles(join(p.path, ".github", "instructions")).map((f) =>
+      fileEntry(r, f, meta("rule")),
+    ),
+    ...skillsIn(r, join(p.path, ".github", "skills"), "copilot", "project").map((s) => s.file),
+    ...skillsIn(r, join(p.path, ".claude", "skills"), "copilot", "project").map((s) => s.file),
+    ...skillsIn(r, join(p.path, ".agents", "skills"), "copilot", "project").map((s) => s.file),
+    ...subagentsIn(r, join(p.path, ".github", "agents"), "copilot", "project"),
+  ];
+}
+
 function codexUserSkills(home: string): DiscoveredSkill[] {
   const r = homeRoot(home);
   return [
@@ -145,16 +192,26 @@ function codexUserSkills(home: string): DiscoveredSkill[] {
   ];
 }
 
+/** `*.instructions.md` under a Copilot instructions folder, recursively. */
+function instructionFiles(dir: string): string[] {
+  return filesUnder(dir, ".md").filter((f) => f.toLowerCase().endsWith(".instructions.md"));
+}
+
 /** Every provider's user skills, plus the project's (the Skills tab's switches). */
 export function listSkills(home: string, project: ProjectRef | null): DiscoveredSkill[] {
   const r = project ? projectRoot(project) : null;
   return [
     ...skillsIn(homeRoot(home), join(home, ".claude", "skills"), "claude", "user"),
     ...codexUserSkills(home),
+    ...skillsIn(homeRoot(home), join(home, ".copilot", "skills"), "copilot", "user"),
+    ...skillsIn(homeRoot(home), join(home, ".agents", "skills"), "copilot", "user"),
     ...(project && r
       ? [
           ...skillsIn(r, join(project.path, ".claude", "skills"), "claude", "project"),
           ...skillsIn(r, join(project.path, ".agents", "skills"), "codex", "project"),
+          ...skillsIn(r, join(project.path, ".github", "skills"), "copilot", "project"),
+          ...skillsIn(r, join(project.path, ".claude", "skills"), "copilot", "project"),
+          ...skillsIn(r, join(project.path, ".agents", "skills"), "copilot", "project"),
         ]
       : []),
   ];
@@ -291,6 +348,82 @@ export function loadedCodex(
     ...subagentsIn(h, join(home, ".codex", "agents"), "codex", "user"),
     ...(gitRoot
       ? subagentsIn(rootFor(gitRoot, h, r), join(gitRoot, ".codex", "agents"), "codex", "project")
+      : []),
+  ];
+  return {
+    memory: unique(memory, (f) => f.absolutePath),
+    skills: unique(skills, (s) => s.file.absolutePath),
+    subagents: unique(subagents, (f) => f.absolutePath),
+  };
+}
+
+/**
+ * What Copilot CLI loads from `cwd`: its user instructions and skills, then in every folder
+ * from the filesystem root down to `cwd` the `AGENTS.md`, `CLAUDE.md`, `.claude/CLAUDE.md`,
+ * `GEMINI.md` and `.github/copilot-instructions.md` it reads plus `.github/instructions`; skills
+ * from `.github/skills`, `.claude/skills` and `.agents/skills` from the repo root to `cwd`, and
+ * custom agents from `.github/agents` at the repo root.
+ */
+export function loadedCopilot(
+  home: string,
+  cwd: string,
+  gitRoot: string | null,
+  project: ProjectRef | null,
+): LoadedFiles {
+  const h = homeRoot(home);
+  const r: ConfigRoot = project ? projectRoot(project) : h;
+  const copilot = join(home, ".copilot");
+  const memory: AgentConfigFile[] = [
+    ...existing(h, join(copilot, "copilot-instructions.md"), {
+      provider: "copilot",
+      kind: "memory",
+      scope: "user",
+    }),
+    ...instructionFiles(join(copilot, "instructions")).map((f) =>
+      fileEntry(h, f, { provider: "copilot", kind: "rule", scope: "user" }),
+    ),
+  ];
+  for (const dir of ancestors(cwd).reverse()) {
+    const root = rootFor(dir, h, r);
+    for (const name of ["AGENTS.md", "CLAUDE.md", join(".claude", "CLAUDE.md"), "GEMINI.md"]) {
+      memory.push(
+        ...existing(root, join(dir, name), {
+          provider: "copilot",
+          kind: "memory",
+          scope: "project",
+        }),
+      );
+    }
+    memory.push(
+      ...existing(root, join(dir, ".github", "copilot-instructions.md"), {
+        provider: "copilot",
+        kind: "memory",
+        scope: "project",
+      }),
+      ...instructionFiles(join(dir, ".github", "instructions")).map((f) =>
+        fileEntry(root, f, { provider: "copilot", kind: "rule", scope: "project" }),
+      ),
+    );
+  }
+  const upToRepo = gitRoot ? dirsFromRootTo(gitRoot, cwd).reverse() : [cwd];
+  const skills = [
+    ...skillsIn(h, join(copilot, "skills"), "copilot", "user"),
+    ...skillsIn(h, join(home, ".agents", "skills"), "copilot", "user"),
+    ...upToRepo.flatMap((d) =>
+      [".github", ".claude", ".agents"].flatMap((folder) =>
+        skillsIn(rootFor(d, h, r), join(d, folder, "skills"), "copilot", "project"),
+      ),
+    ),
+  ];
+  const subagents = [
+    ...subagentsIn(h, join(copilot, "agents"), "copilot", "user"),
+    ...(gitRoot
+      ? subagentsIn(
+          rootFor(gitRoot, h, r),
+          join(gitRoot, ".github", "agents"),
+          "copilot",
+          "project",
+        )
       : []),
   ];
   return {
