@@ -393,6 +393,7 @@ export class AcpSession implements ProviderSession {
     return extensionHost({
       cwd: this.opts.cwd,
       extraRoots: this.opts.additionalDirectories,
+      artifactsDir: this.opts.artifactsDir,
       broker: this.broker,
       mapper: this.mapperOf(acpSessionId) ?? this.mapper,
       subagents: this.subagents,

@@ -102,14 +102,26 @@ export class AcpPolicy {
     // as one, whatever the agent titled it.
     const mcp = mcpOf(call, this.mcpServers);
     if (mcp && this.trustedServers.includes(mcp.server)) return ALLOW;
-    if (!this.isReadOnly && !this.planning && this.sessionAllow.has(this.key(call))) {
+    const kind = typeof call.kind === "string" ? call.kind : "other";
+    const remembered = this.sessionAllow.has(this.key(call));
+    if (!this.isReadOnly && !this.planning && remembered) {
       return { kind: "allow", remembered: true };
     }
-    const kind = typeof call.kind === "string" ? call.kind : "other";
     if (kind === "execute") return this.shell(call);
     if (WRITE_KINDS.has(kind)) return this.edit(call);
     if (kind === "read" || kind === "search") {
-      return this.gate(this.firstRisk(pathsOf(call, this.ctx.cwd), classifyRead), undefined, true);
+      const decided = this.gate(
+        this.firstRisk(pathsOf(call, this.ctx.cwd), classifyRead),
+        undefined,
+        true,
+      );
+      // A read-only session (orchestrator, PMs) remembers a read it was allowed once: the ask it
+      // answered was the agent's own boundary, and `allow_session` must stick for that path. The
+      // gate still decides first, so a denial (CodeDen's credentials) is never remembered.
+      if (this.isReadOnly && remembered && decided.kind === "allow") {
+        return { kind: "allow", remembered: true };
+      }
+      return decided;
     }
     if (kind === "fetch") {
       const url = str(call.rawInput, "url");
