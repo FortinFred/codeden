@@ -190,9 +190,9 @@ export function openSpecChangeId(title: string): string {
  * `openspec_change_exists` when the folder already has a proposal, so nothing is overwritten;
  * a folder without one is a write that died before its rename (or a leftover), so it is reused
  * and its stale tmp cleared. A failed write removes the folder it made. 409
- * `openspec_change_root_unsafe` when the project's `openspec` or `openspec/changes` is a symbolic
- * link or not a directory, so no write leaves the project. The next tick's `intakeOpenSpec` takes
- * the change in.
+ * `openspec_change_root_unsafe` when the project's `openspec` or `openspec/changes`, or the
+ * change folder itself, is a symbolic link or not a directory, so no write leaves the project.
+ * The next tick's `intakeOpenSpec` takes the change in.
  */
 export function writeOpenSpecChange(
   project: Project,
@@ -218,6 +218,22 @@ export function writeOpenSpecChange(
     mkdirSync(dir);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    // `mkdirSync` also finds a symbolic link to a folder existing, and writing through it would
+    // leave the project. `lstatSync` looks at the folder itself, never at what a link points to.
+    let stats: Stats;
+    try {
+      stats = lstatSync(dir);
+    } catch {
+      throw conflict(
+        `The OpenSpec change \`${id}\` can't be read. A change is only ever written inside the project.`,
+        OPENSPEC_CHANGE_ROOT_UNSAFE,
+      );
+    }
+    if (!stats.isDirectory())
+      throw conflict(
+        `The OpenSpec change \`${id}\` is a ${stats.isSymbolicLink() ? "symbolic link" : "file"}, not a real folder. A change is only ever written inside the project.`,
+        OPENSPEC_CHANGE_ROOT_UNSAFE,
+      );
     // A folder with a proposal is taken, and is never touched. Without one it is a write that
     // died before its rename (or an empty leftover): the folder is reused, its tmp cleared.
     if (hasEntry(file))

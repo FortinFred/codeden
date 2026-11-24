@@ -313,6 +313,22 @@ describe("creating an OpenSpec change from the app (#33)", () => {
     rmSync(outside, { recursive: true, force: true });
   });
 
+  it("refuses a symlinked change folder, and leaves its target untouched", async () => {
+    env = createFactoryEnv();
+    const outside = mkdtempSync(join(tmpdir(), "codeden-openspec-outside-"));
+    mkdirSync(join(env.project.path, "openspec", "changes"), { recursive: true });
+    symlinkSync(outside, join(env.project.path, "openspec", "changes", "add-login"), "dir");
+    await s.enable("software_factory", { tuning: { workSource: "openspec" } });
+
+    expect(
+      refusal(() =>
+        env.factory.createOpenSpecChange(env.project.id, { title: "Add login", body: "Sign in." }),
+      ),
+    ).toMatchObject({ status: 409, code: OPENSPEC_CHANGE_ROOT_UNSAFE });
+    expect(readdirSync(outside)).toEqual([]);
+    rmSync(outside, { recursive: true, force: true });
+  });
+
   it("refuses a symlinked openspec folder, and leaves its target untouched", async () => {
     env = createFactoryEnv();
     const outside = mkdtempSync(join(tmpdir(), "codeden-openspec-outside-"));
