@@ -83,9 +83,10 @@ export const OPENSPEC_CHANGE_BODY_MAX = 8_000;
  * `openspec/changes/<id>/proposal.md`. The folder id is a slug of the title (lowercase letters,
  * digits and hyphens only, so it can't leave `openspec/changes/`); 409
  * `openspec_change_exists` when that folder already exists, rather than overwrite it. The next
- * factory check takes the change in, as for a change made with the CLI. When `openspec` or
- * `openspec/changes` is a symbolic link (or not a directory), the request is refused with 409
- * `openspec_change_root_unsafe`: a change folder is only ever written inside the project.
+ * factory check takes the change in, as for a change made with the CLI. When `openspec`,
+ * `openspec/changes` or the change folder itself is a symbolic link (or not a directory), the
+ * request is refused with 409 `openspec_change_root_unsafe`: a change folder is only ever written
+ * inside the project.
  */
 export const FactoryOpenSpecChangeRequest = z.object({
   /** The proposal's `# ` heading. Whitespace is trimmed; 1 to 200 characters. */
@@ -110,9 +111,10 @@ export type FactoryOpenSpecChangeResponse = z.infer<typeof FactoryOpenSpecChange
 export const OPENSPEC_CHANGE_EXISTS = "openspec_change_exists";
 
 /**
- * Error code of `POST .../factory/openspec/changes` (409): `openspec` or `openspec/changes` in
- * the project is a symbolic link or not a directory, so writing a change could leave the project.
- * The read path skips such a project instead (a symlinked root is never followed).
+ * Error code of `POST .../factory/openspec/changes` (409): `openspec`, `openspec/changes` or the
+ * change folder in the project is a symbolic link or not a directory, so writing a change could
+ * leave the project. The read path skips such a project instead (a symlinked root is never
+ * followed).
  */
 export const OPENSPEC_CHANGE_ROOT_UNSAFE = "openspec_change_root_unsafe";
 
