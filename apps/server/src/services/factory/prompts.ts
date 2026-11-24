@@ -98,7 +98,7 @@ function openspecPlanBlock(item: FactoryItem): string {
   return [
     `<openspec-change id="${change.id}" path="${change.path}">`,
     `This item tracks the OpenSpec change in \`${change.path}/\`. Keep the plan there, in your worktree, and commit it with your code so the pull request carries it:`,
-    "- `proposal.md` is the request (already there).",
+    `- \`proposal.md\` is the request. The change may have been written and not committed yet, in which case it isn't in your worktree (yours is branched from the default branch): if \`${change.path}/proposal.md\` isn't there, create it from the item's title (a \`# \` heading) and the request text in \`<issue>\`, then commit it with the code. If it is there, keep it.`,
     "- Analyze writes `design.md` (the decisions, alternatives and risks) and the spec delta in `specs/<capability>/spec.md` (`## ADDED Requirements` / `## MODIFIED Requirements`, each requirement with its scenarios).",
     "- `tasks.md` is the checklist: one task per acceptance criterion.",
     "- Implement works through `tasks.md` and checks each task off as it is done.",
