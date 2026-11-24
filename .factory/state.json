@@ -1,0 +1,101 @@
+{
+  "level": 0,
+  "since": 1795480246,
+  "sessions": {
+    "50951ab7-a95b-4864-9969-e8c172c08b6a": {
+      "started": 1795480246,
+      "edits": 16,
+      "tests": [
+        {
+          "cmd": "cd /home/fred/workspaces/codeden/.codeden-dev/wt/codeden/81b45b42 && pnpm --filter @codeden/server exec vitest run test/factory-finish-first.test.ts -t \"counts builds that haven't opened their PR yet\" 2>&1 | tail -50",
+          "at": 1795480328
+        },
+        {
+          "cmd": "cd /home/fred/workspaces/codeden/.codeden-dev/wt/codeden/81b45b42 && pnpm --filter @codeden/server exec vitest run test/factory-finish-first.test.ts -t \"counts builds that haven't opened their PR yet\" 2>&1 | tail -60",
+          "at": 1795480337
+        },
+        {
+          "cmd": "cd /home/fred/workspaces/codeden/.codeden-dev/wt/codeden/81b45b42 && pnpm --filter @codeden/server exec vitest run test/factory-finish-first.test.ts -t \"counts builds that haven't opened their PR yet\" 2>&1 | tail -30",
+          "at": 1795480404
+        },
+        {
+          "cmd": "cd /home/fred/workspaces/codeden/.codeden-dev/wt/codeden/81b45b42 && pnpm --filter @codeden/server exec vitest run test/factory-finish-first.test.ts test/factory-scout-now.test.ts test/factory-spec-approval-stalls.test.ts test/factory-scout-held-tick.test.ts 2>&1 | tail -40",
+          "at": 1795480409
+        },
+        {
+          "cmd": "cd /home/fred/workspaces/codeden/.codeden-dev/wt/codeden/81b45b42 && pnpm --filter @codeden/server exec vitest run test/factory-finish-first.test.ts test/factory-scout-now.test.ts test/factory-spec-approval-stalls.test.ts test/factory-scout-held-tick.test.ts 2>&1 | tail -40",
+          "at": 1795480441
+        },
+        {
+          "cmd": "cd /home/fred/workspaces/codeden/.codeden-dev/wt/codeden/81b45b42 && pnpm --filter @codeden/contracts exec vitest run test/factory-api.test.ts 2>&1 | tail -20",
+          "at": 1795480447
+        },
+        {
+          "cmd": "cd /home/fred/workspaces/codeden/.codeden-dev/wt/codeden/81b45b42 && pnpm --filter @codeden/server exec vitest run --dir test factory 2>&1 | tail -50",
+          "at": 1795480470
+        },
+        {
+          "cmd": "cd /home/fred/workspaces/codeden/.codeden-dev/wt/codeden/81b45b42 && pnpm --filter @codeden/server exec vitest run test/factory-stalls.test.ts test/factory-flow.test.ts 2>&1 | tail -160",
+          "at": 1795480490
+        },
+        {
+          "cmd": "cd /home/fred/workspaces/codeden/.codeden-dev/wt/codeden/81b45b42 && ls apps/server/vitest.config.* 2>/dev/null; grep -n \"factory-flow\\|testTimeout\\|server\" vitest.config.ts | head -40",
+          "at": 1795480495
+        },
+        {
+          "cmd": "cd /home/fred/workspaces/codeden/.codeden-dev/wt/codeden/81b45b42 && sed -n '60,220p' vitest.config.ts",
+          "at": 1795480505
+        },
+        {
+          "cmd": "cd /home/fred/workspaces/codeden/.codeden-dev/wt/codeden/81b45b42 && pnpm --filter @codeden/server exec vitest run test/factory-stalls.test.ts 2>&1 | tail -20",
+          "at": 1795480510
+        },
+        {
+          "cmd": "cd /home/fred/workspaces/codeden/.codeden-dev/wt/codeden/81b45b42 && pnpm exec vitest run --project \"@codeden/server (runner)\" apps/server/test/factory-flow.test.ts 2>&1 | tail -30",
+          "at": 1795480595
+        },
+        {
+          "cmd": "cd /home/fred/workspaces/codeden/.codeden-dev/wt/codeden/81b45b42 && pnpm lint 2>&1 | tail -30",
+          "at": 1795480599
+        },
+        {
+          "cmd": "cd /home/fred/workspaces/codeden/.codeden-dev/wt/codeden/81b45b42 && pnpm typecheck 2>&1 | tail -30",
+          "at": 1795480605
+        },
+        {
+          "cmd": "cd /home/fred/workspaces/codeden/.codeden-dev/wt/codeden/81b45b42 && pnpm typecheck 2>&1 | tail -25",
+          "at": 1795480637
+        },
+        {
+          "cmd": "cd /home/fred/workspaces/codeden/.codeden-dev/wt/codeden/81b45b42 && pnpm --filter @codeden/web exec vitest run test/factory-limits.test.tsx test/factory-refresh.test.tsx test/factory-kill-switch.test.tsx 2>&1 | tail -25",
+          "at": 1795480646
+        },
+        {
+          "cmd": "cd /home/fred/workspaces/codeden/.codeden-dev/wt/codeden/81b45b42 && pnpm test 2>&1 | tail -60",
+          "at": 1795480818
+        },
+        {
+          "cmd": "cd /home/fred/workspaces/codeden/.codeden-dev/wt/codeden/81b45b42 && pnpm test > /tmp/codeden-test.log 2>&1; echo \"exit=$?\"; grep -E \"^ FAIL|^ Test Files|^      Tests|^     Tests\" /tmp/codeden-test.log | head -40",
+          "at": 1795481010
+        },
+        {
+          "cmd": "git config --global --get safe.bareRepository; git config --global --get-regexp '^url\\.' || true; cd /home/fred/workspaces/codeden/.codeden-dev/wt/codeden/81b45b42 && pnpm --filter @codeden/web exec vitest run test/live-dictation.test.ts 2>&1 | tail -15",
+          "at": 1795481022
+        },
+        {
+          "cmd": "cd /home/fred/workspaces/codeden/.codeden-dev/wt/codeden/81b45b42 && pnpm lint 2>&1 | tail -10 && git status --short && git --no-pager diff --stat && git --no-pager diff -- packages/contracts/src/factory-api.ts apps/server/src/services/factory/wip.ts apps/web/src/components/factory/meta.ts",
+          "at": 1795481028
+        },
+        {
+          "cmd": "cd /home/fred/workspaces/codeden/.codeden-dev/wt/codeden/81b45b42 && pnpm --filter @codeden/server exec vitest run test/factory-finish-first.test.ts test/factory-scout-now.test.ts test/factory-stalls.test.ts 2>&1 | tail -12 && pnpm --filter @codeden/contracts exec vitest run test/factory-api.test.ts",
+          "at": 1795481051
+        },
+        {
+          "cmd": "cd /home/fred/workspaces/codeden/.codeden-dev/wt/codeden/81b45b42 && pnpm --filter @codeden/web typecheck 2>&1 | tail -5 && pnpm lint 2>&1 | tail -5",
+          "at": 1795481137
+        }
+      ],
+      "blocked": false
+    }
+  }
+}
