@@ -40,13 +40,27 @@ describe("CodeDen's tools as a skill instead of MCP", () => {
     );
   });
 
-  it("carries the tool endpoint and the session token in the session options", () => {
+  it("carries the tool endpoint, the session token and the role's tools in the session options", () => {
     const base = { sessionId: "s1", role: "agent", cwd: "/r", autonomy: "auto" };
     expect(SessionOptions.parse(base).codeDenTools).toBeUndefined();
-    const tools = { url: "http://127.0.0.1:4100/mcp", token: "cdm_abc" };
+    const tools = {
+      url: "http://127.0.0.1:4100/mcp",
+      token: "cdm_abc",
+      tools: [{ name: "report_progress", summary: "report what you are doing now" }],
+    };
     expect(roundTrip(SessionOptions, { ...base, codeDenTools: tools }).codeDenTools).toEqual(tools);
     expect(
-      SessionOptions.safeParse({ ...base, codeDenTools: { url: "not a url", token: "t" } }).success,
+      SessionOptions.safeParse({
+        ...base,
+        codeDenTools: { url: "not a url", token: "t", tools: [] },
+      }).success,
+    ).toBe(false);
+    // Without its tool list the skill channel has nothing to document.
+    expect(
+      SessionOptions.safeParse({
+        ...base,
+        codeDenTools: { url: "http://127.0.0.1:4100/mcp", token: "t" },
+      }).success,
     ).toBe(false);
   });
 });

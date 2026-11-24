@@ -12,6 +12,15 @@ import {
 
 const TOKEN = "cdm_test-session-token";
 
+const TOOLS = [
+  { name: "report_progress", summary: "report what you are doing now" },
+  { name: "finish", summary: "record the outcome when your task is done" },
+  { name: "browser_screenshot", summary: "a PNG of the page, saved as an artifact" },
+  { name: "create_pull_request", summary: "push your branch and open its pull request" },
+  { name: "attach_evidence", summary: "post screenshots and test output on a PR or issue" },
+  { name: "generate_image", summary: "create an image file in your worktree" },
+];
+
 type Reply = { status?: number; type: string; body: (body: unknown) => string };
 
 /** A loopback stand-in for CodeDen's tool endpoint, answering one scripted reply. */
@@ -75,8 +84,8 @@ afterEach(() => {
   for (const plugin of plugins.splice(0)) plugin.remove();
 });
 
-function pluginFor(sessionId = "s1") {
-  const plugin = writeCopilotToolPlugin({ sessionId });
+function pluginFor(sessionId = "s1", tools = TOOLS) {
+  const plugin = writeCopilotToolPlugin({ sessionId, tools });
   plugins.push(plugin);
   return plugin;
 }
@@ -93,9 +102,6 @@ describe("Copilot's CodeDen tool plugin", () => {
     expect(skill).toContain('node "');
     for (const tool of [
       "report_progress",
-      "ask_user",
-      "share_to_chat",
-      "suggest_followups",
       "finish",
       "browser_screenshot",
       "create_pull_request",
@@ -104,6 +110,7 @@ describe("Copilot's CodeDen tool plugin", () => {
     ]) {
       expect(skill, tool).toContain(`\`${tool}\``);
     }
+    expect(skill).not.toContain("`start_session`");
     for (const file of [
       "plugin.json",
       "skills/codeden-tools/SKILL.md",
@@ -114,6 +121,19 @@ describe("Copilot's CodeDen tool plugin", () => {
       if (process.platform !== "win32") {
         expect(statSync(join(plugin.dir, file)).mode & 0o777, file).toBe(0o600);
       }
+    }
+  });
+
+  it("documents the tools it is given, so a PM's skill lists its own tools", () => {
+    const plugin = pluginFor("pm-1", [
+      { name: "start_session", summary: "start an agent session" },
+      { name: "get_project_status", summary: "the project's state and budget" },
+    ]);
+    const skill = readFileSync(join(plugin.dir, "skills", "codeden-tools", "SKILL.md"), "utf8");
+    expect(skill).toContain("`start_session`: start an agent session");
+    expect(skill).toContain("`get_project_status`");
+    for (const tool of ["finish", "create_pull_request", "browser_screenshot"]) {
+      expect(skill, tool).not.toContain(`\`${tool}\``);
     }
   });
 
