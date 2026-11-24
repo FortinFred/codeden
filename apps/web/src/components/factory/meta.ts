@@ -283,9 +283,10 @@ export const PROVIDER_WAIT_HELP =
 export const SLOT_ORDER_HELP =
   "A free agent goes to reviews first (PRs whose CI passed, then rebases and revise rounds, then PRs whose CI still runs), then to builds, and to the scout last. Work in progress is never interrupted.";
 
-/** "Finishing open work (2 of 2 PRs open)". */
-export function wipLabel(wip: { openPrs: number; limit: number }): string {
-  return `Finishing open work (${wip.openPrs} of ${wip.limit} PRs open)`;
+/** "Finishing open work (2 of 2 PRs open)", with builds that will open one: ", 1 more being built". */
+export function wipLabel(wip: { openPrs: number; limit: number; building?: number }): string {
+  const more = (wip.building ?? 0) > 0 ? `, ${wip.building} more being built` : "";
+  return `Finishing open work (${wip.openPrs} of ${wip.limit} PRs open${more})`;
 }
 
 /** The scout's review areas (one long-lived reviewer agent per area). */

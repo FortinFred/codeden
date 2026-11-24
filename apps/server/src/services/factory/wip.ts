@@ -53,18 +53,20 @@ export function wipOf(ctx: FactoryContext, project: Project, loop: FactoryLoop):
     .filter((i) => ownedPr(ctx, i) !== null);
   const { counted, waits } = recovering(ctx, project.id);
   const openPrs = active.length + counted.length;
+  const building = unopenedBuilds(ctx, project.id);
   const limit = wipLimit(project, loop);
   return {
     openPrs,
+    building,
     limit,
-    holding: openPrs >= limit,
+    holding: openPrs + building >= limit,
     waitingOnProvider: waits.length,
     note: providerWaitText(ctx, waits),
   };
 }
 
 /** "Finishing open work (2 of 2 PRs open)", with builds that will open one: ", 1 more being built". */
-export function wipText(wip: FactoryWip, building = 0): string {
+export function wipText(wip: FactoryWip, building = wip.building): string {
   const more = building > 0 ? `, ${building} more being built` : "";
   return `Finishing open work (${wip.openPrs} of ${wip.limit} PRs open${more})`;
 }

@@ -870,12 +870,21 @@ export const FactoryWip = z.object({
    * Open, unmerged factory PRs the loop is still taking to a merge: those of work in the queue
    * (a rebuild), building or verifying, or back by itself after a failure outside its code. Not
    * those of failed or escalated work waiting for a person, nor those of work waiting for its
-   * provider (see `waitingOnProvider`).
+   * provider (see `waitingOnProvider`). Builds that haven't opened one yet are in `building`.
    */
   openPrs: z.int().nonnegative().default(0),
+  /**
+   * Builds under way that haven't opened their pull request yet and will, so each takes room
+   * under the limit too (a build from the queue, or an approved spec whose builder was just
+   * sent the Implement step). A spec waiting for a person's approval doesn't count.
+   */
+  building: z.int().nonnegative().default(0),
   /** The limit in force: `maxOpenPrs`, or the agent limit when that is unset. */
   limit: z.int().positive().default(2),
-  /** At or above the limit: no new build starts from the queue and the scout files nothing. */
+  /**
+   * At or above the limit (`openPrs` + `building`): no new build starts from the queue and the
+   * scout files nothing.
+   */
   holding: z.boolean().default(false),
   /**
    * Open PRs of work that failed for a reason outside its code and can only go back once its

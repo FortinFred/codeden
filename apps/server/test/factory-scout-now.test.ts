@@ -76,9 +76,20 @@ describe("Run scout now (§10.1)", () => {
     expect(blocked({}, {}, { waitingForAgent: 1 })).toBe(
       "No free agent: reviews, fixes and builds waiting for one come first.",
     );
-    const wip = { openPrs: 2, limit: 2, holding: true, waitingOnProvider: 0, note: null };
+    const wip = {
+      openPrs: 2,
+      building: 0,
+      limit: 2,
+      holding: true,
+      waitingOnProvider: 0,
+      note: null,
+    };
     expect(blocked({}, {}, { wip })).toBe(
       "Finishing open work (2 of 2 PRs open): the scout finds new work once open pull requests merge.",
+    );
+    // Builds that haven't opened their PR yet take the room too.
+    expect(blocked({}, {}, { wip: { ...wip, openPrs: 0, building: 2 } })).toBe(
+      "Finishing open work (0 of 2 PRs open, 2 more being built): the scout finds new work once open pull requests merge.",
     );
     // A paused loop is named before the agent limit.
     expect(blocked({}, { state: "paused", pausedReason: null }, { activeSessions: 2 })).toBe(

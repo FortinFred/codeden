@@ -31,8 +31,9 @@ function Meter(props: {
   max: number;
   display: string;
   warn?: boolean;
+  title?: string;
 }) {
-  const { label, value, max, display, warn = true } = props;
+  const { label, value, max, display, warn = true, title } = props;
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   const bar = !warn
     ? "bg-status-running"
@@ -42,7 +43,10 @@ function Meter(props: {
         ? "bg-status-waiting"
         : "bg-primary";
   return (
-    <div className="min-w-[9rem] flex-1 rounded-lg border border-border bg-surface px-3 py-2">
+    <div
+      title={title}
+      className="min-w-[9rem] flex-1 rounded-lg border border-border bg-surface px-3 py-2"
+    >
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-3xs tracking-wider text-muted-foreground uppercase">{label}</span>
         <span className="text-[13px] font-medium whitespace-nowrap tabular-nums">{display}</span>
@@ -221,9 +225,14 @@ export function FactoryPanel({ project }: { project: Project }) {
           />
           <Meter
             label="PRs in progress"
-            value={f.wip.openPrs}
+            value={f.wip.openPrs + f.wip.building}
             max={f.wip.limit}
-            display={`${f.wip.openPrs} / ${f.wip.limit}`}
+            display={`${f.wip.openPrs + f.wip.building} / ${f.wip.limit}`}
+            title={
+              f.wip.building > 0
+                ? `${f.wip.openPrs} open, ${f.wip.building} being built (each will open a PR)`
+                : undefined
+            }
             warn={false}
           />
           {f.limits.autoMerge ? (
