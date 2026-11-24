@@ -45,7 +45,7 @@ Every pull request carries its **test results** (a `## Test results` section in 
 
 A project's factory can find its work in **OpenSpec** instead of GitHub issues (the **Work source** setting): every folder under the project's `openspec/changes/` with a `proposal.md` becomes a **feature** item. The folders are local files, so their work is trusted and needs no classification.
 
-- **The proposal is the request.** Its first `# ` heading is the item's title, and the rest of the file is what the builder reads (a YAML frontmatter block is ignored).
+- **The proposal is the request.** Its first `# ` heading is the item's title, and the rest of the file is what the builder reads (a YAML frontmatter block is ignored). A change that isn't committed yet lives only in the main checkout, so the brief tells the builder to write `proposal.md` from the item's title and request when its worktree doesn't have it, and to keep it when it does.
 - **The plan travels with the pull request.** The builder keeps the change folder up to date in its worktree: `design.md` (the decisions, alternatives and risks), the spec delta under `specs/<capability>/spec.md`, and `tasks.md` with one task per acceptance criterion, checked off as the work is done. The pull request carries the folder along with the code, and its body names the change instead of `Fixes #N`.
 - **There is no issue.** Nothing is created or commented on GitHub: the item page shows the change and its path, and the analysis, spec approval, review and follow-ups stay on the item.
 - **GitHub still does the delivery.** Pull requests, CI, review, the merge queue, reverts and evidence are unchanged. A local-only project can't use this source, because the factory still needs pull requests and CI.

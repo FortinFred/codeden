@@ -1,5 +1,7 @@
+import type { FactoryItem } from "@codeden/contracts";
 import { describe, expect, it } from "vitest";
 import { parseProposal } from "../src/services/factory/openspec";
+import { builderPrompt } from "../src/services/factory/prompts";
 
 /** Reading an OpenSpec change's proposal for the factory (§10.1). */
 
@@ -18,5 +20,91 @@ describe("OpenSpec proposals", () => {
       title: "add-login",
       body: "Users sign in.",
     });
+  });
+});
+
+/**
+ * An OpenSpec change read from the main checkout may be uncommitted, so it isn't in the builder's
+ * worktree. The brief must say what to do then, not promise the proposal is already there.
+ */
+describe("OpenSpec builder brief", () => {
+  const item = {
+    id: "item-1",
+    projectId: "project-1",
+    workKey: "openspec:add-login",
+    title: "Add login",
+    summary: "Users sign in with an email and a password.",
+    source: "openspec",
+    area: null,
+    acceptanceCriteria: [],
+    score: null,
+    stage: "building",
+    type: "feature",
+    classification: null,
+    trust: "trusted",
+    author: null,
+    admittedBy: null,
+    investigation: null,
+    specApproval: null,
+    issue: null,
+    openspecChange: { id: "add-login", path: "openspec/changes/add-login" },
+    pr: null,
+    builderSessionId: null,
+    builderProvider: null,
+    reviewerSessionId: null,
+    reviewerProvider: null,
+    reviewerNote: null,
+    review: null,
+    lessonsNote: null,
+    followUps: [],
+    spotCheck: null,
+    checks: [],
+    attempts: 0,
+    reason: null,
+    stop: null,
+    failureKind: null,
+    rebuiltFrom: null,
+    note: null,
+    mergeSha: null,
+    mergePath: null,
+    revertOf: null,
+    triageRequestedAt: null,
+    nudges: {},
+    largeChange: null,
+    sessionsArchivedAt: null,
+    earlierSessionIds: [],
+    sessionIds: [],
+    itemBudgetSince: null,
+    stepSince: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    mergedAt: null,
+    finishedAt: null,
+  } as unknown as FactoryItem;
+
+  it("tells the builder to write a missing proposal from the title and the request", () => {
+    const brief = builderPrompt(item, "");
+    expect(brief).toMatch(/if `openspec\/changes\/add-login\/proposal\.md` (isn't|is not) there/i);
+    expect(brief).toMatch(/create it from the item's title/);
+    expect(brief).toMatch(/and the request text/);
+    expect(brief).not.toContain("`proposal.md` is the request (already there).");
+  });
+
+  it("keeps the proposal when the worktree already has it", () => {
+    const brief = builderPrompt(item, "");
+    expect(brief).toMatch(/if it is there, keep it/i);
+  });
+
+  it("leaves a GitHub issue's brief without the OpenSpec plan block", () => {
+    const issueItem = {
+      ...item,
+      workKey: "issue:31",
+      source: "issue",
+      openspecChange: null,
+      issue: { number: 31, url: "https://github.com/owner/repo/issues/31" },
+    } as FactoryItem;
+    const brief = builderPrompt(issueItem, "");
+    expect(brief).not.toContain("<openspec-change");
+    expect(brief).not.toContain("create it from the item's title");
   });
 });
