@@ -237,7 +237,22 @@ export class AcpPolicy {
     if (kind === "execute") {
       return `execute:${workdirOf(call, this.ctx.cwd)}\n${commandOf(call)}`;
     }
+    if (kind === "fetch") {
+      // A fetch the user allowed for the session covers its whole host, so the next URL on it
+      // doesn't ask again; an unparseable URL matches only itself.
+      const url = str(call.rawInput, "url");
+      return `fetch:${(url && hostOf(url)) || url || call.title || ""}`;
+    }
     const paths = pathsOf(call, this.ctx.cwd).sort().join("\n");
     return `${kind}:${call.name ?? ""}:${paths || (call.title ?? "")}`;
+  }
+}
+
+/** The host of a URL (with its port, when it has one), for remembering a fetch for the session. */
+function hostOf(url: string): string | undefined {
+  try {
+    return new URL(url).host || undefined;
+  } catch {
+    return undefined;
   }
 }
