@@ -17,6 +17,8 @@ import {
   type FactoryLesson,
   type FactoryLoop,
   type FactoryLoopState,
+  type FactoryOpenSpecChangeRequest,
+  type FactoryOpenSpecChangeResponse,
   type FactoryPlanRoundRequest,
   type FactoryReleaseRequest,
   type FactoryReproductionReport,
@@ -30,6 +32,7 @@ import {
   isFactoryMode,
   type KillSwitchMode,
   type KillSwitchResponse,
+  OPENSPEC_NOT_WORK_SOURCE,
   type Project,
   type RawEventEnvelope,
   type ReviewVerdict,
@@ -67,6 +70,7 @@ import { allowLargeChange } from "./large-change";
 import { forgetLesson, keepLessons } from "./lessons";
 import { runTick } from "./loop";
 import { MainCiReads } from "./main-ci";
+import { writeOpenSpecChange } from "./openspec";
 import { PrFiles } from "./overlap";
 import { reportReproduction, submitAnalysis } from "./pipeline";
 import { localDay } from "./policy";
@@ -346,6 +350,36 @@ export class FactoryService {
       this.deps.log?.(`factory: committing the vision: ${errorMessage(error)}`);
       return { ...saved, pr: null, shareError: errorMessage(error) };
     }
+  }
+
+  /**
+   * "New change" for an OpenSpec work source: write `openspec/changes/<slug>/proposal.md` in the
+   * project's main checkout. The next tick's `intakeOpenSpec` takes it in, as for a change made
+   * with the OpenSpec CLI. Needs a GitHub project (400 `openspec_needs_github`) and the OpenSpec
+   * work source (409 `openspec_not_work_source`); 409 `openspec_change_exists` when the folder
+   * is taken, so nothing is overwritten.
+   */
+  createOpenSpecChange(
+    projectId: string,
+    req: FactoryOpenSpecChangeRequest,
+  ): FactoryOpenSpecChangeResponse {
+    const project = this.deps.projects.get(projectId);
+    if (project.kind !== "github")
+      throw badRequest(
+        "The OpenSpec work source needs a GitHub project: pull requests, CI and merge still run there.",
+        "openspec_needs_github",
+      );
+    const loop = this.data.loopOrNew(projectId, this.ctx.now());
+    if (loop.tuning.workSource !== "openspec")
+      throw conflict(
+        "The factory's work source is GitHub issues, not OpenSpec changes.",
+        OPENSPEC_NOT_WORK_SOURCE,
+      );
+    const change = writeOpenSpecChange(project, req);
+    return {
+      change,
+      message: `Created ${change.path}; the change appears on the next factory check.`,
+    };
   }
 
   /**

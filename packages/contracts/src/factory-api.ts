@@ -72,6 +72,47 @@ export const OpenSpecChangeRef = z.object({
 });
 export type OpenSpecChangeRef = z.infer<typeof OpenSpecChangeRef>;
 
+/** Longest title of an OpenSpec change created from the app (its proposal's `# ` heading). */
+export const OPENSPEC_CHANGE_TITLE_MAX = 200;
+/** Longest body (why and what) of an OpenSpec change created from the app. */
+export const OPENSPEC_CHANGE_BODY_MAX = 8_000;
+
+/**
+ * `POST /api/projects/:id/factory/openspec/changes` ("New change"): write a change folder from
+ * the app, so nobody has to leave it to run the OpenSpec CLI or hand-write
+ * `openspec/changes/<id>/proposal.md`. The folder id is a slug of the title (lowercase letters,
+ * digits and hyphens only, so it can't leave `openspec/changes/`); 409
+ * `openspec_change_exists` when that folder already exists, rather than overwrite it. The next
+ * factory check takes the change in, as for a change made with the CLI.
+ */
+export const FactoryOpenSpecChangeRequest = z.object({
+  /** The proposal's `# ` heading. Whitespace is trimmed; 1 to 200 characters. */
+  title: z.string().trim().min(1).max(OPENSPEC_CHANGE_TITLE_MAX),
+  /** Why and what, below the heading. At most 8,000 characters; empty when left out. */
+  body: z.string().trim().max(OPENSPEC_CHANGE_BODY_MAX).default(""),
+});
+export type FactoryOpenSpecChangeRequest = z.infer<typeof FactoryOpenSpecChangeRequest>;
+/** What a client sends (`body` may be left out). */
+export type FactoryOpenSpecChangeRequestInit = z.input<typeof FactoryOpenSpecChangeRequest>;
+
+/** `POST /api/projects/:id/factory/openspec/changes`: the created change. */
+export const FactoryOpenSpecChangeResponse = z.object({
+  /** The change's folder name and its path, relative to the project root. */
+  change: OpenSpecChangeRef,
+  /** What to tell the user: the change appears on the next factory check. */
+  message: z.string(),
+});
+export type FactoryOpenSpecChangeResponse = z.infer<typeof FactoryOpenSpecChangeResponse>;
+
+/** Error code of `POST .../factory/openspec/changes` (409): the change folder already exists. */
+export const OPENSPEC_CHANGE_EXISTS = "openspec_change_exists";
+
+/**
+ * Error code of `POST .../factory/openspec/changes` (409): the project's factory takes its work
+ * from GitHub issues, so a change folder would not be picked up.
+ */
+export const OPENSPEC_NOT_WORK_SOURCE = "openspec_not_work_source";
+
 /**
  * Where a work item is in its life (the pipeline step is derived from it, see `pipelineStep`):
  * - `candidate`: received, waiting to be classified (Identify type)

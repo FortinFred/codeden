@@ -4,6 +4,8 @@ import {
   FactoryFileFollowUpRequest,
   type FactoryItemResponse,
   type FactoryLessonResponse,
+  FactoryOpenSpecChangeRequest,
+  type FactoryOpenSpecChangeResponse,
   FactoryRetryOptions,
   type FactoryScorecard,
   FactoryScorecardQuery,
@@ -33,6 +35,8 @@ import { jsonBody, queryOf } from "./validate";
  * `items/:itemId/spot-check` records a person's spot-check of a merge (409
  * `spot_check_not_pending` unless one waits); `spot-check/file-issue` files the follow-up issue of
  * a problem recorded without one (409 `spot_check_not_problem` or `spot_check_issue_filed`).
+ * `openspec/changes` ("New change") writes an OpenSpec change folder from the app (409
+ * `openspec_change_exists` when the folder is taken).
  */
 export function projectFactoryRoutes(s: AppServices) {
   const f = s.factory;
@@ -59,6 +63,11 @@ export function projectFactoryRoutes(s: AppServices) {
       return c.json(await f.status(c.req.param("id")));
     })
     .post("/:id/factory/digest", async (c) => c.json(await f.digestNow(c.req.param("id"))))
+    .post("/:id/factory/openspec/changes", jsonBody(FactoryOpenSpecChangeRequest), (c) =>
+      c.json<FactoryOpenSpecChangeResponse>(
+        f.createOpenSpecChange(c.req.param("id"), c.req.valid("json")),
+      ),
+    )
     .get("/:id/factory/scorecard", queryOf(FactoryScorecardQuery), async (c) =>
       c.json<FactoryScorecard>(await f.scorecard(c.req.param("id"), c.req.valid("query").days)),
     )
