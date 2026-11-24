@@ -1,8 +1,19 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   type FactoryAnalysisReport,
   OPENSPEC_CHANGE_EXISTS,
+  OPENSPEC_CHANGE_ROOT_UNSAFE,
   OPENSPEC_NOT_WORK_SOURCE,
 } from "@codeden/contracts";
 import { afterEach, describe, expect, it } from "vitest";
@@ -135,6 +146,42 @@ describe("an OpenSpec work source (#21)", () => {
     expect(changeItem("add-login")?.stage).not.toBe("rejected");
   });
 
+  it("does not take in changes from a symlinked changes folder", async () => {
+    env = createFactoryEnv();
+    const outside = mkdtempSync(join(tmpdir(), "codeden-openspec-outside-"));
+    mkdirSync(join(outside, "add-login"));
+    writeFileSync(
+      join(outside, "add-login", "proposal.md"),
+      "# Add login\n\nOutside the project.\n",
+    );
+    mkdirSync(join(env.project.path, "openspec"), { recursive: true });
+    symlinkSync(outside, join(env.project.path, "openspec", "changes"), "dir");
+    await s.enable("software_factory", { tuning: { workSource: "openspec" } });
+    await s.tick();
+
+    expect(items()).toEqual([]);
+    expect(env.starts).toEqual([]);
+    rmSync(outside, { recursive: true, force: true });
+  });
+
+  it("keeps working when the project path is itself a symlink", async () => {
+    env = createFactoryEnv();
+    const link = join(mkdtempSync(join(tmpdir(), "codeden-project-link-")), "project");
+    symlinkSync(env.project.path, link, "dir");
+    const linked = env.updateProject({ path: link });
+    change("add-login", "# Add login\n\nUsers need to sign in.\n");
+    await s.enable("software_factory", { tuning: { workSource: "openspec" } });
+    await s.tick();
+
+    expect(items().map((i) => i.workKey)).toEqual(["openspec:add-login"]);
+    const created = env.factory.createOpenSpecChange(linked.id, { title: "Add search", body: "" });
+    expect(created.change.id).toBe("add-search");
+    expect(
+      existsSync(join(env.project.path, "openspec", "changes", "add-search", "proposal.md")),
+    ).toBe(true);
+    rmSync(join(link, ".."), { recursive: true, force: true });
+  });
+
   it("reviews and merges an OpenSpec item with no issue", async () => {
     env = createFactoryEnv();
     change("add-login", "# Add login\n\nUsers need to sign in.\n");
@@ -248,6 +295,37 @@ describe("creating an OpenSpec change from the app (#33)", () => {
         "utf8",
       ),
     ).toBe("# Add login\n\nKeep me.\n");
+  });
+
+  it("refuses a symlinked changes folder, and leaves its target untouched", async () => {
+    env = createFactoryEnv();
+    const outside = mkdtempSync(join(tmpdir(), "codeden-openspec-outside-"));
+    mkdirSync(join(env.project.path, "openspec"), { recursive: true });
+    symlinkSync(outside, join(env.project.path, "openspec", "changes"), "dir");
+    await s.enable("software_factory", { tuning: { workSource: "openspec" } });
+
+    expect(
+      refusal(() =>
+        env.factory.createOpenSpecChange(env.project.id, { title: "Add login", body: "Sign in." }),
+      ),
+    ).toMatchObject({ status: 409, code: OPENSPEC_CHANGE_ROOT_UNSAFE });
+    expect(readdirSync(outside)).toEqual([]);
+    rmSync(outside, { recursive: true, force: true });
+  });
+
+  it("refuses a symlinked openspec folder, and leaves its target untouched", async () => {
+    env = createFactoryEnv();
+    const outside = mkdtempSync(join(tmpdir(), "codeden-openspec-outside-"));
+    symlinkSync(outside, join(env.project.path, "openspec"), "dir");
+    await s.enable("software_factory", { tuning: { workSource: "openspec" } });
+
+    expect(
+      refusal(() =>
+        env.factory.createOpenSpecChange(env.project.id, { title: "Add login", body: "Sign in." }),
+      ),
+    ).toMatchObject({ status: 409, code: OPENSPEC_CHANGE_ROOT_UNSAFE });
+    expect(readdirSync(outside)).toEqual([]);
+    rmSync(outside, { recursive: true, force: true });
   });
 
   it("needs the OpenSpec work source, so a change is never written where nothing reads it", async () => {
