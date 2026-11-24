@@ -1,8 +1,10 @@
+import type { Stats } from "node:fs";
 import {
   lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   writeFileSync,
@@ -11,6 +13,7 @@ import { join } from "node:path";
 import {
   type FactoryOpenSpecChangeRequest,
   OPENSPEC_CHANGE_EXISTS,
+  OPENSPEC_CHANGE_ROOT_UNSAFE,
   type OpenSpecChangeRef,
   type Project,
 } from "@codeden/contracts";
@@ -62,12 +65,57 @@ export function parseProposal(id: string, contents: string): { title: string; bo
 }
 
 /**
+ * The project's `openspec/changes` folder, resolved from the project's real path. Every
+ * component that already exists must be a real directory (`lstatSync`, so a symbolic link is
+ * refused): a repository can commit a symlink there, and following it would read proposals from
+ * or write a change outside the project. A component that doesn't exist ends the walk, and the
+ * rest is created beneath it. The project path itself may be a symlink.
+ */
+function resolveChangeRoot(project: Project): { root: string } | { reason: string } {
+  let root: string;
+  try {
+    root = realpathSync(project.path);
+  } catch {
+    return { reason: `The project folder \`${project.path}\` can't be read.` };
+  }
+  const parts = ["openspec", "changes"] as const;
+  for (const [index, part] of parts.entries()) {
+    const label = parts.slice(0, index + 1).join("/");
+    const next = join(root, part);
+    let stat: Stats;
+    try {
+      stat = lstatSync(next);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT")
+        return { root: join(root, ...parts.slice(index)) };
+      return { reason: `\`${label}\` can't be read in the project.` };
+    }
+    if (!stat.isDirectory())
+      return {
+        reason: `\`${label}\` is a ${stat.isSymbolicLink() ? "symbolic link" : "file"}, not a real directory in the project.`,
+      };
+    root = next;
+  }
+  return { root };
+}
+
+/**
  * The project's OpenSpec changes: one per folder under `openspec/changes/` with a readable
  * `proposal.md`, sorted by id. An empty list when the folder is missing, and a folder that can't
- * be read is skipped: a repository without OpenSpec is simply not an OpenSpec work source.
+ * be read is skipped: a repository without OpenSpec is simply not an OpenSpec work source. A
+ * symlinked `openspec` or `openspec/changes` is never followed, and is reported when a `log` is
+ * given.
  */
-export function readOpenSpecChanges(project: Project): OpenSpecChange[] {
-  const root = join(project.path, "openspec", "changes");
+export function readOpenSpecChanges(
+  project: Project,
+  log?: (message: string) => void,
+): OpenSpecChange[] {
+  const resolved = resolveChangeRoot(project);
+  if ("reason" in resolved) {
+    log?.(`factory: OpenSpec changes skipped: ${resolved.reason}`);
+    return [];
+  }
+  const root = resolved.root;
   let ids: string[];
   try {
     ids = readdirSync(root, { withFileTypes: true })
@@ -141,8 +189,10 @@ export function openSpecChangeId(title: string): string {
  * with the title as its `# ` heading, then the body and a trailing newline. 409
  * `openspec_change_exists` when the folder already has a proposal, so nothing is overwritten;
  * a folder without one is a write that died before its rename (or a leftover), so it is reused
- * and its stale tmp cleared. A failed write removes the folder it made. The next tick's
- * `intakeOpenSpec` takes the change in.
+ * and its stale tmp cleared. A failed write removes the folder it made. 409
+ * `openspec_change_root_unsafe` when the project's `openspec` or `openspec/changes` is a symbolic
+ * link or not a directory, so no write leaves the project. The next tick's `intakeOpenSpec` takes
+ * the change in.
  */
 export function writeOpenSpecChange(
   project: Project,
@@ -151,7 +201,13 @@ export function writeOpenSpecChange(
   const title = req.title.replace(/\s+/g, " ").trim();
   const body = req.body.trim();
   const id = openSpecChangeId(title);
-  const root = join(project.path, "openspec", "changes");
+  const resolved = resolveChangeRoot(project);
+  if ("reason" in resolved)
+    throw conflict(
+      `${resolved.reason} A change is only ever written inside the project.`,
+      OPENSPEC_CHANGE_ROOT_UNSAFE,
+    );
+  const root = resolved.root;
   const dir = join(root, id);
   const file = join(dir, "proposal.md");
   const tmp = `${file}.tmp`;
