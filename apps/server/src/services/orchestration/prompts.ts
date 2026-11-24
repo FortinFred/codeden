@@ -92,6 +92,20 @@ You manage one project. You triage its GitHub issues, plan work, start and steer
 ${SHARED}`;
 
 /** The CodeDen system-prompt section for the orchestrator or a PM. */
-export function rolePrompt(role: "orchestrator" | "pm"): string {
-  return role === "orchestrator" ? ORCHESTRATOR_PROMPT : PM_PROMPT;
+export function rolePrompt(
+  role: "orchestrator" | "pm",
+  toolChannel: "mcp" | "skills" = "mcp",
+): string {
+  const base = role === "orchestrator" ? ORCHESTRATOR_PROMPT : PM_PROMPT;
+  if (toolChannel === "mcp") return base;
+  // The same responsibilities, with CodeDen's tools coming from the plugin skill instead of MCP.
+  return base
+    .replace(
+      "use the CodeDen MCP tools for CodeDen state",
+      "use the CodeDen tools (the `codeden-tools` skill) for CodeDen state",
+    )
+    .replace(
+      "through CodeDen tools on the `codeden` MCP server",
+      "through CodeDen tools in the `codeden-tools` skill",
+    );
 }

@@ -4,11 +4,26 @@ import { CODEDEN_HOME_RULE, rolePrompt } from "../services/orchestration/prompts
 /** Name of CodeDen's MCP server inside agent sessions (tools appear as `codeden` tools). */
 export const MCP_SERVER_NAME = "codeden";
 
+/** Name of the plugin skill that carries CodeDen's tools when MCP is off (`toolChannel`). */
+export const TOOL_SKILL_NAME = "codeden-tools";
+
+/**
+ * How a session reaches CodeDen's tools: over the internal MCP server (the default), or, for a
+ * provider whose MCP client a company policy blocks, through a local plugin skill and its bridge
+ * script (`Settings.agentTools.withoutMcp`).
+ */
+export type ToolChannel = "mcp" | "skills";
+
 /** What the CodeDen system prompt depends on: who started the session and where it works. */
 export type PromptSession = Pick<Session, "role" | "startedBy" | "worktreePath" | "autonomy">;
 
 /** The session's project, when it has one: GitHub projects get the pull request flow. */
 export type PromptProject = Pick<Project, "kind"> | null;
+
+/** The system prompt's options; absent `toolChannel` means MCP. */
+export interface PromptOptions {
+  toolChannel?: ToolChannel;
+}
 
 /**
  * The decisions that are the user's to make. Everything else an agent decides itself, states
@@ -17,11 +32,21 @@ export type PromptProject = Pick<Project, "kind"> | null;
 const USER_DECISIONS =
   "destructive or irreversible steps (deleting data or someone else's work, force-pushing, rewriting shared history), spending money or creating accounts or credentials, outward-facing actions your brief didn't ask for (publishing, releases, deploys, messages or comments to other people), protected areas, or a request with two readings that lead to substantially different work";
 
-const TOOLS = `## CodeDen tools
+/** The first line of the tools section, which differs by channel. */
+function toolsIntro(channel: ToolChannel): string {
+  if (channel === "mcp") return `CodeDen tools are on the \`${MCP_SERVER_NAME}\` MCP server:`;
+  return [
+    `CodeDen's MCP server is not used in this session (MCP is off for this provider). Every CodeDen tool is run through the \`${TOOL_SKILL_NAME}\` skill, which is loaded for you: load it, then run its bridge script, one tool per command:`,
+    "",
+    "```",
+    "node <the script path the skill names> <tool> '<json arguments>'",
+    "```",
+    "",
+    "The tools and their arguments are:",
+  ].join("\n");
+}
 
-CodeDen tools are on the \`${MCP_SERVER_NAME}\` MCP server:
-
-- \`report_progress\`: one line about what you are doing now, at the start of each phase.
+const TOOL_BULLETS = `- \`report_progress\`: one line about what you are doing now, at the start of each phase.
 - \`ask_user\`: only for a decision that is the user's to make (see above). If it returns "pending", finish what you can and end your turn; the answer arrives as your next message.
 - \`share_to_chat\`: show the user a file or image instead of describing it.
 - Browser (\`browser_navigate\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_press\`, \`browser_mouse\`, \`browser_select\`, \`browser_upload\`, \`browser_dialog\`, \`browser_screenshot\`, \`browser_logs\`, \`browser_wait\`, \`browser_evaluate\`, \`browser_open_dev_server\`): the same browser the user watches. Use it to check UI work: open the dev server, read the page with \`browser_snapshot\`, act on element refs, check \`browser_logs\` for errors. Where there is no useful ref (canvas, map, drag handle, hover menu), click, hover, drag or scroll at screenshot coordinates with \`browser_mouse\`. Choose options of \`<select>\` menus with \`browser_select\` and upload files with \`browser_upload\`, not by clicking. A page's alert, confirm or prompt waits for an answer: give it with \`browser_dialog\`. Call \`browser_screenshot\` with \`share: true\` for screenshots that show your result.
@@ -30,6 +55,20 @@ CodeDen tools are on the \`${MCP_SERVER_NAME}\` MCP server:
 - If a CodeDen tool fails with "CodeDen server unreachable", CodeDen is restarting: wait a few seconds and call the same tool again.
 - \`finish\`: record the outcome and a short summary once your assigned task is done.
 - \`suggest_followups\`: 2 to 4 short next prompts the user might send, including optional next steps you would otherwise ask about. Call it as the last action of every turn.`;
+
+function toolsSection(channel: ToolChannel): string {
+  return `## CodeDen tools\n\n${toolsIntro(channel)}\n\n${TOOL_BULLETS}`;
+}
+
+/** The "use CodeDen's tools for CodeDen state" rule in the channel's terms. */
+function homeRule(channel: ToolChannel): string {
+  return channel === "mcp"
+    ? CODEDEN_HOME_RULE
+    : CODEDEN_HOME_RULE.replace(
+        "CodeDen MCP tools",
+        `CodeDen tools (the \`${TOOL_SKILL_NAME}\` skill)`,
+      );
+}
 
 /** Where the agent works: its own worktree, or a folder it shares with the user. */
 function workspaceLine(session: PromptSession): string {
@@ -91,14 +130,19 @@ function starterLine(session: PromptSession): string | null {
 }
 
 /** The agent's section of the system prompt (§8.3): how to work, then CodeDen's tools. */
-export function agentPrompt(session: PromptSession, project: PromptProject): string {
+export function agentPrompt(
+  session: PromptSession,
+  project: PromptProject,
+  options: PromptOptions = {},
+): string {
+  const channel = options.toolChannel ?? "mcp";
   const lines = [
     "- Keep going until the task is done. When a detail is open (naming, structure, approach, test strategy, a choice between reasonable designs), pick what fits the brief and the project's conventions, note the assumption, and carry on. Don't ask about things you can decide yourself, check in the code, or easily change later.",
     permissionLine(session),
     ...gitLines(session, project),
     `- Ask with \`ask_user\` only for a decision that is the user's to make: ${USER_DECISIONS}. First do everything that doesn't depend on the answer, then ask one question with your recommended option first.`,
     starterLine(session),
-    `- ${CODEDEN_HOME_RULE}`,
+    `- ${homeRule(channel)}`,
     '- End each turn with what you did and what you assumed, not with a question. Put optional next steps in `suggest_followups` instead of asking "Want me to ...?".',
   ].filter((l): l is string => l !== null);
   return [
@@ -110,11 +154,17 @@ export function agentPrompt(session: PromptSession, project: PromptProject): str
     "",
     ...lines,
     "",
-    TOOLS,
+    toolsSection(channel),
   ].join("\n");
 }
 
 /** The CodeDen section appended to a session's system prompt, by role (§7.5, §8.3). */
-export function codedenSystemPrompt(session: PromptSession, project: PromptProject): string {
-  return session.role === "agent" ? agentPrompt(session, project) : rolePrompt(session.role);
+export function codedenSystemPrompt(
+  session: PromptSession,
+  project: PromptProject,
+  options: PromptOptions = {},
+): string {
+  const channel = options.toolChannel ?? "mcp";
+  if (session.role === "agent") return agentPrompt(session, project, options);
+  return rolePrompt(session.role, channel);
 }
