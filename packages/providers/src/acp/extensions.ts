@@ -17,6 +17,12 @@ export interface AcpExtensionHost {
   readonly cwd: string;
   /** The session's extra writable roots (`SessionOptions.additionalDirectories`). */
   readonly extraRoots: readonly string[];
+  /**
+   * The session's own artifacts folder in CodeDen's home (`SessionOptions.artifactsDir`): the
+   * screenshots and attachments CodeDen itself hands the session. Trusted for reading only;
+   * writes there still go through the policy.
+   */
+  readonly artifactsDir?: string;
   readonly broker: ApprovalBroker;
   /** The thread the call came from: the root's, or a subagent's child thread. */
   readonly mapper: AcpEventMapper;
@@ -39,6 +45,7 @@ export interface AcpExtensionHost {
 export function extensionHost(parts: {
   cwd: string;
   extraRoots?: readonly string[];
+  artifactsDir?: string;
   broker: ApprovalBroker;
   mapper: AcpEventMapper;
   subagents: AcpSubagents;
@@ -49,6 +56,7 @@ export function extensionHost(parts: {
   return {
     cwd: parts.cwd,
     extraRoots: parts.extraRoots ?? [],
+    ...(parts.artifactsDir ? { artifactsDir: parts.artifactsDir } : {}),
     broker: parts.broker,
     mapper: parts.mapper,
     subagents: parts.subagents,
