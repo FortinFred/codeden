@@ -1,6 +1,20 @@
-import { lstatSync, readdirSync, readFileSync } from "node:fs";
+import {
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
-import type { OpenSpecChangeRef, Project } from "@codeden/contracts";
+import {
+  type FactoryOpenSpecChangeRequest,
+  OPENSPEC_CHANGE_EXISTS,
+  type OpenSpecChangeRef,
+  type Project,
+} from "@codeden/contracts";
+import { conflict } from "../errors";
 
 /**
  * OpenSpec as a factory work source (§10.1). A change is a folder under `openspec/changes/`
@@ -74,4 +88,67 @@ export function readOpenSpecChanges(project: Project): OpenSpecChange[] {
     }
   }
   return changes;
+}
+
+/** Longest change id created from the app, so the folder name stays a comfortable file name. */
+const CHANGE_ID_MAX = 100;
+
+/**
+ * A change folder id from a title: lowercase letters, digits and single hyphens, with accents
+ * folded (`Café` becomes `cafe`). Nothing else survives, so a title can never make the folder
+ * leave `openspec/changes/`; a title with no usable character becomes `change`.
+ */
+export function openSpecChangeId(title: string): string {
+  const id = title
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, CHANGE_ID_MAX)
+    .replace(/-+$/, "");
+  return id || "change";
+}
+
+/**
+ * Create a change folder from the app ("New change"): `openspec/changes/<slug>/proposal.md`
+ * with the title as its `# ` heading, then the body and a trailing newline. 409
+ * `openspec_change_exists` when the folder is taken, so nothing is overwritten; a failed write
+ * removes the folder it made. The next tick's `intakeOpenSpec` takes the change in.
+ */
+export function writeOpenSpecChange(
+  project: Project,
+  req: FactoryOpenSpecChangeRequest,
+): OpenSpecChangeRef {
+  const title = req.title.replace(/\s+/g, " ").trim();
+  const body = req.body.trim();
+  const id = openSpecChangeId(title);
+  const root = join(project.path, "openspec", "changes");
+  const dir = join(root, id);
+  mkdirSync(root, { recursive: true });
+  try {
+    // Without `recursive`, this fails when the folder exists: the change is never overwritten.
+    mkdirSync(dir);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST")
+      throw conflict(
+        `The OpenSpec change \`${id}\` already exists; choose another title.`,
+        OPENSPEC_CHANGE_EXISTS,
+      );
+    throw error;
+  }
+  try {
+    // Write then rename, so a tick never reads a half-written proposal.
+    const file = join(dir, "proposal.md");
+    writeFileSync(`${file}.tmp`, body ? `# ${title}\n\n${body}\n` : `# ${title}\n`);
+    renameSync(`${file}.tmp`, file);
+  } catch (error) {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // The write error is the one worth reporting.
+    }
+    throw error;
+  }
+  return { id, path: `openspec/changes/${id}` };
 }

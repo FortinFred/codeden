@@ -1,7 +1,12 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { FactoryAnalysisReport } from "@codeden/contracts";
+import {
+  type FactoryAnalysisReport,
+  OPENSPEC_CHANGE_EXISTS,
+  OPENSPEC_NOT_WORK_SOURCE,
+} from "@codeden/contracts";
 import { afterEach, describe, expect, it } from "vitest";
+import { openSpecChangeId } from "../src/services/factory/openspec";
 import { createFactoryEnv, type FactoryEnv } from "./support/factory-env";
 import { factorySteps } from "./support/factory-steps";
 
@@ -25,6 +30,16 @@ function change(id: string, contents: string): void {
 const items = () => env.factory.data.items(env.project.id);
 const changeItem = (id: string) => items().find((i) => i.openspecChange?.id === id);
 const startFor = (id: string) => env.starts.find((start) => start.workKey === `openspec:${id}`);
+
+/** The error a call refused with (the service throws synchronously). */
+function refusal(run: () => unknown): { status?: number; code?: string } {
+  try {
+    run();
+  } catch (error) {
+    return error as { status?: number; code?: string };
+  }
+  throw new Error("Expected the call to be refused");
+}
 
 describe("an OpenSpec work source (#21)", () => {
   it("takes each change folder as a feature item, with no issue", async () => {
@@ -171,5 +186,72 @@ describe("an OpenSpec work source (#21)", () => {
     expect(changeItem("add-login")?.specApproval).toMatchObject({ state: "pending" });
     // The factory's comment paths no-op without an issue.
     expect(env.gh.comments).toEqual([]);
+  });
+});
+
+describe("creating an OpenSpec change from the app (#33)", () => {
+  it("writes the proposal, and the next tick takes it in", async () => {
+    env = createFactoryEnv();
+    await s.enable("software_factory", { tuning: { workSource: "openspec" } });
+    const created = env.factory.createOpenSpecChange(env.project.id, {
+      title: "  Add gift cards  ",
+      body: "Shoppers want to pay with a gift card.\n",
+    });
+    expect(created.change).toEqual({
+      id: "add-gift-cards",
+      path: "openspec/changes/add-gift-cards",
+    });
+    expect(created.message).toContain("next factory check");
+    const file = join(env.project.path, "openspec", "changes", "add-gift-cards", "proposal.md");
+    expect(readFileSync(file, "utf8")).toBe(
+      "# Add gift cards\n\nShoppers want to pay with a gift card.\n",
+    );
+
+    await s.tick();
+    expect(changeItem("add-gift-cards")).toMatchObject({
+      source: "openspec",
+      type: "feature",
+      title: "Add gift cards",
+      summary: "Shoppers want to pay with a gift card.",
+      workKey: "openspec:add-gift-cards",
+    });
+  });
+
+  it("derives a folder id that can never leave openspec/changes/", () => {
+    expect(openSpecChangeId("../../Café / Passwörd!")).toBe("cafe-password");
+    expect(openSpecChangeId("!!!")).toBe("change");
+    expect(openSpecChangeId("x".repeat(300))).toHaveLength(100);
+    expect(openSpecChangeId("Add gift cards")).not.toMatch(/[./]/);
+  });
+
+  it("refuses an existing folder rather than overwrite it", async () => {
+    env = createFactoryEnv();
+    await s.enable("software_factory", { tuning: { workSource: "openspec" } });
+    change("add-login", "# Add login\n\nKeep me.\n");
+    expect(
+      refusal(() =>
+        env.factory.createOpenSpecChange(env.project.id, {
+          title: "Add login",
+          body: "Something else",
+        }),
+      ),
+    ).toMatchObject({ status: 409, code: OPENSPEC_CHANGE_EXISTS });
+    expect(
+      readFileSync(
+        join(env.project.path, "openspec", "changes", "add-login", "proposal.md"),
+        "utf8",
+      ),
+    ).toBe("# Add login\n\nKeep me.\n");
+  });
+
+  it("needs the OpenSpec work source, so a change is never written where nothing reads it", async () => {
+    env = createFactoryEnv();
+    await s.enable();
+    expect(
+      refusal(() =>
+        env.factory.createOpenSpecChange(env.project.id, { title: "Add login", body: "" }),
+      ),
+    ).toMatchObject({ status: 409, code: OPENSPEC_NOT_WORK_SOURCE });
+    expect(existsSync(join(env.project.path, "openspec"))).toBe(false);
   });
 });

@@ -8,6 +8,8 @@ import {
   type FactoryLesson,
   FactoryLessonResponse,
   FactoryLoop,
+  type FactoryOpenSpecChangeRequestInit,
+  FactoryOpenSpecChangeResponse,
   type FactoryRetryOptions,
   FactoryScorecard,
   type FactorySetTypeRequest,
@@ -70,6 +72,15 @@ export interface FactoryApi {
   runScout(projectId: string): Promise<FactoryStatus>;
   /** Today's digest, now (also raised in the inbox). */
   digest(projectId: string): Promise<FactoryDigest>;
+  /**
+   * "New change" for an OpenSpec work source: write `openspec/changes/<slug>/proposal.md` in the
+   * project's main checkout; the next factory check takes it in. 409 `openspec_change_exists`
+   * when the folder is taken, `openspec_not_work_source` when GitHub issues are the work source.
+   */
+  createOpenSpecChange(
+    projectId: string,
+    req: FactoryOpenSpecChangeRequestInit,
+  ): Promise<FactoryOpenSpecChangeResponse>;
   /** Let an issue from an untrusted author in (it is never merged automatically). */
   admit(projectId: string, req: FactoryAdmitRequest): Promise<FactoryItem>;
   /** Move an item that hasn't started to another pipeline. */
@@ -154,6 +165,8 @@ export function httpFactoryApi(http: Fetcher): FactoryApi {
     tick: (id) => post(`${p(id)}/factory/tick`, {}, (v) => FactoryStatus.parse(v)),
     runScout: (id) => post(`${p(id)}/factory/scout`, {}, (v) => FactoryStatus.parse(v)),
     digest: (id) => post(`${p(id)}/factory/digest`, {}, (v) => FactoryDigest.parse(v)),
+    createOpenSpecChange: (id, req) =>
+      post(`${p(id)}/factory/openspec/changes`, req, (v) => FactoryOpenSpecChangeResponse.parse(v)),
     admit: (id, req) => post(`${p(id)}/factory/admit`, req, item),
     setType: (id, req) => post(`${p(id)}/factory/set-type`, req, item),
     retry: (id, itemId, opts) =>
