@@ -15,9 +15,19 @@ import { type AcpToolState, commandOf, mcpOf, pathsOf, workdirOf } from "./items
 
 /** What CodeDen does with one `session/request_permission`. */
 export type AcpPolicyDecision =
-  | { kind: "allow" }
+  | {
+      kind: "allow";
+      /** Allowed because the user answered `allow_session` for this call earlier. */
+      remembered?: boolean;
+    }
   | { kind: "deny"; message: string }
   | { kind: "ask"; action: ApprovalAction; reason: string };
+
+/** An ask the agent's own rules make about a call CodeDen's policy allows (`AcpExtensions.boundary`). */
+export interface AcpBoundaryAsk {
+  action: ApprovalAction;
+  reason: string;
+}
 
 const ALLOW: AcpPolicyDecision = { kind: "allow" };
 
@@ -92,7 +102,9 @@ export class AcpPolicy {
     // as one, whatever the agent titled it.
     const mcp = mcpOf(call, this.mcpServers);
     if (mcp && this.trustedServers.includes(mcp.server)) return ALLOW;
-    if (!this.isReadOnly && !this.planning && this.sessionAllow.has(this.key(call))) return ALLOW;
+    if (!this.isReadOnly && !this.planning && this.sessionAllow.has(this.key(call))) {
+      return { kind: "allow", remembered: true };
+    }
     const kind = typeof call.kind === "string" ? call.kind : "other";
     if (kind === "execute") return this.shell(call);
     if (WRITE_KINDS.has(kind)) return this.edit(call);
