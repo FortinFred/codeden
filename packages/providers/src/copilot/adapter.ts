@@ -26,7 +26,7 @@ import {
   fallbackCopilotModels,
   parseCopilotModelChoices,
 } from "./models";
-import { copilotPathAsk } from "./permissions";
+import { copilotBoundaryAsk } from "./permissions";
 import { COPILOT_ACP_ARGS, type CopilotProbe, probeCopilot } from "./probe";
 import {
   CODEDEN_TOOLS_TOKEN_ENV,
@@ -49,9 +49,9 @@ export const COPILOT_AGENT: AcpAgentSpec = {
   modes: { agent: `${MODE_BASE}agent`, plan: `${MODE_BASE}plan` },
   // Its ACP server starts HTTP and SSE servers only: stdio ones it takes and ignores.
   mcpTransports: { stdio: false },
-  // Its own path boundary (working folder, the folders it was given, temp): the ask is the
-  // user's, not CodeDen's policy's, which allows reads anywhere.
-  extensions: { boundary: (_req, call, host) => copilotPathAsk(call, host) },
+  // Its own boundary asks (paths outside the folders it trusts, URLs it fetches) are the user's,
+  // not CodeDen's policy's, which allows reads, searches and fetches anywhere.
+  extensions: { boundary: (_req, call, host) => copilotBoundaryAsk(call, host) },
 };
 
 /**
