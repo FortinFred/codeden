@@ -4,6 +4,7 @@ import {
   dayKey,
   daysBetween,
   type PricedRow,
+  priceRows,
   seriesOf,
   totalsOf,
 } from "../src/services/usage/aggregate";
@@ -89,6 +90,67 @@ describe("price table", () => {
       asOf: "2026-11-10",
     };
     expect(findPrice("opencode", "openai/gpt-5.5", [override])?.label).toBe("Mine");
+  });
+
+  it("prices Copilot's resold models from the vendor's table", () => {
+    // Copilot's Claude ids use dots where the Claude table uses dashes.
+    expect(findPrice("copilot", "claude-sonnet-5.5")).toMatchObject({
+      label: "Sonnet 5.5",
+      inputPerMTok: 2,
+    });
+    expect(findPrice("copilot", "claude-opus-4.8")?.label).toBe("Opus 4.8");
+    expect(findPrice("copilot", "claude-haiku-5.5")?.label).toBe("Haiku 5.5");
+    expect(findPrice("copilot", "gpt-6.1-sol")).toMatchObject({
+      label: "GPT-6.1 Sol",
+      inputPerMTok: 2,
+    });
+    expect(findPrice("copilot", "gpt-5.3-codex")?.label).toBe("GPT-5.3 Codex");
+    // Auto, Default and the models whose list price isn't in the bundled tables stay unpriced.
+    for (const model of [
+      "auto",
+      "default",
+      "gemini-4-carbon",
+      "grok-4.7",
+      "kimi-k3",
+      "mai-code-1.1-flash",
+      "gpt-6.2-sol",
+    ]) {
+      expect(findPrice("copilot", model)).toBeNull();
+    }
+    // A user's own price for a Copilot id wins over the vendor's.
+    const override: ModelPrice = {
+      provider: "copilot",
+      model: "claude-sonnet-5.5",
+      inputPerMTok: 1,
+      outputPerMTok: 2,
+      cacheReadPerMTok: 0,
+      cacheWritePerMTok: 0,
+      asOf: "2026-11-10",
+    };
+    expect(findPrice("copilot", "claude-sonnet-5.5", [override])?.inputPerMTok).toBe(1);
+  });
+
+  it("estimates a Copilot turn's cost from the vendor's list price", () => {
+    const tokens = {
+      inputTokens: 1e6,
+      outputTokens: 1e6,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      reasoningTokens: 0,
+    };
+    const row = {
+      ...tokens,
+      provider: "copilot",
+      model: "claude-sonnet-5.5",
+      reportedCostUsd: null,
+    };
+    // 1M input at $2 + 1M output at $10, the Claude Sonnet 5.5 list price.
+    expect(costOf(row)).toEqual({ costUsd: 12, costSource: "estimated" });
+    expect(costOf({ ...row, reportedCostUsd: 0.4 })).toEqual({
+      costUsd: 0.4,
+      costSource: "reported",
+    });
+    expect(costOf({ ...row, model: "auto" })).toEqual({ costUsd: 0, costSource: "unpriced" });
   });
 
   it("lets user overrides win over the bundled table", () => {
@@ -202,6 +264,53 @@ describe("aggregation", () => {
     expect(t.sessions).toBe(2);
     expect(t.cacheHitRate).toBeCloseTo(0.8);
     expect(totalsOf([]).cacheHitRate).toBeNull();
+  });
+
+  it("prices a Copilot turn into report totals and a budget", () => {
+    const [priced] = priceRows(
+      [
+        {
+          sessionId: "s1",
+          turnId: "t1",
+          projectId: "p1",
+          provider: "copilot",
+          model: "claude-sonnet-5.5",
+          role: "agent",
+          source: "user",
+          automationId: null,
+          inputTokens: 1e6,
+          outputTokens: 1e6,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          reasoningTokens: 0,
+          reportedCostUsd: null,
+          ts: "2026-11-07T10:00:00.000Z",
+        },
+      ],
+      [],
+      "UTC",
+    );
+    expect(priced).toMatchObject({ costSource: "estimated", costUsd: 12, day: "2026-11-07" });
+    const totals = totalsOf([priced as PricedRow]);
+    expect(totals).toMatchObject({
+      costUsd: 12,
+      estimatedCostUsd: 12,
+      unpricedTurns: 0,
+      turns: 1,
+    });
+    const budget: UsageBudget = {
+      id: "b1",
+      projectId: null,
+      period: "daily",
+      limitUsd: 10,
+      warnAtPercent: 80,
+      enabled: true,
+    };
+    expect(budgetStatus(budget, totals.costUsd, "2026-11-07")).toMatchObject({
+      spentUsd: 12,
+      percent: 120,
+      state: "exceeded",
+    });
   });
 
   it("builds daily stacked series and folds the long tail into Other", () => {

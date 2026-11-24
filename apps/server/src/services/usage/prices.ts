@@ -100,10 +100,25 @@ function normalizeModel(model: string): string {
 const VENDOR_TABLES: Record<string, string> = { anthropic: "claude", openai: "codex" };
 
 /**
+ * Providers that run another vendor's models under that vendor's own names, priced from its
+ * table (an API-equivalent figure for a subscription). Copilot CLI's Claude ids use dots
+ * (`claude-sonnet-5.5`) where the Claude table uses dashes; its GPT ids already match the
+ * Codex table. Anything else it lists (Gemini, Grok, Kimi, Auto, Default) has no list price
+ * here and stays unpriced.
+ */
+function resoldModel(provider: string, id: string): { provider: string; model: string } | null {
+  if (provider !== "copilot") return null;
+  if (id.startsWith("claude-")) return { provider: "claude", model: id.replace(/\./g, "-") };
+  if (/^(gpt-|o\d)/.test(id)) return { provider: "codex", model: id };
+  return null;
+}
+
+/**
  * The price for a model: user overrides first, then the bundled table; within each, an exact
  * id match, else the longest entry the id starts with at a `-` boundary (dated snapshots such
  * as `claude-sonnet-4-5-20250929`). A `<vendor>/<model>` id with no price of its own falls back
- * to the vendor's table (`anthropic/` -> Claude, `openai/` -> Codex). Null when nothing matches.
+ * to the vendor's table (`anthropic/` -> Claude, `openai/` -> Codex), and a model Copilot CLI
+ * resells falls back to its vendor's table too. Null when nothing matches.
  */
 export function findPrice(
   provider: string,
@@ -127,6 +142,8 @@ export function findPrice(
   const slash = model.indexOf("/");
   const vendor = slash > 0 ? VENDOR_TABLES[model.slice(0, slash).toLowerCase()] : undefined;
   if (vendor && vendor !== provider) return findPrice(vendor, model.slice(slash + 1), overrides);
+  const resold = resoldModel(provider, id);
+  if (resold) return findPrice(resold.provider, resold.model, overrides);
   return null;
 }
 
