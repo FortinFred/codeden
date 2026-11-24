@@ -1,7 +1,7 @@
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { CODEDEN_VERSION } from "@codeden/contracts";
+import { CODEDEN_VERSION, type CodeDenTool } from "@codeden/contracts";
 
 /**
  * CodeDen's tools for a session whose provider can't use CodeDen's MCP server, because a company
@@ -30,59 +30,15 @@ export const TOOL_SKILL_NAME = "codeden-tools";
 export const CODEDEN_TOOLS_URL_ENV = "CODEDEN_TOOLS_URL";
 export const CODEDEN_TOOLS_TOKEN_ENV = "CODEDEN_TOOLS_TOKEN";
 
-/** The tools every agent session gets, and one line on what each is for. */
-const AGENT_TOOLS: ReadonlyArray<{ name: string; summary: string }> = [
-  {
-    name: "report_progress",
-    summary: "one line about what you are doing now, at the start of each phase",
-  },
-  {
-    name: "ask_user",
-    summary:
-      "ask the user a decision only they can make; returns their answer, or `pending` (then end your turn and continue without it)",
-  },
-  { name: "share_to_chat", summary: "show the user a file or image in the chat" },
-  {
-    name: "suggest_followups",
-    summary: "2 to 4 short next prompts the user might send; call it last every turn",
-  },
-  { name: "finish", summary: "record the outcome and a short summary when your task is done" },
-  { name: "browser_navigate", summary: "open a URL in the browser the user watches" },
-  { name: "browser_snapshot", summary: "the page's accessibility tree, with element refs" },
-  { name: "browser_click", summary: "click an element by its snapshot ref" },
-  { name: "browser_type", summary: "fill an editable element, or type at the cursor" },
-  { name: "browser_press", summary: "press a key or chord on the focused element" },
-  { name: "browser_mouse", summary: "click, hover, drag or scroll at pixel coordinates" },
-  { name: "browser_select", summary: "choose options of a `<select>` menu by ref" },
-  { name: "browser_upload", summary: "upload files through a file input or upload button" },
-  { name: "browser_dialog", summary: "answer an alert, confirm or prompt dialog" },
-  {
-    name: "browser_screenshot",
-    summary: "a PNG of the page, saved as an artifact and returned to you",
-  },
-  { name: "browser_logs", summary: "console messages and network requests of the tab" },
-  { name: "browser_wait", summary: "wait for a selector, some text or network idle" },
-  { name: "browser_evaluate", summary: "evaluate JavaScript in the page" },
-  { name: "browser_open_dev_server", summary: "open a local dev server in a new tab" },
-  {
-    name: "create_pull_request",
-    summary: "push your branch and open (or update) its pull request",
-  },
-  { name: "attach_evidence", summary: "post screenshots, files and test output on a PR or issue" },
-  { name: "comment_on_issue", summary: "post a short Markdown comment on an issue or PR" },
-  { name: "get_pr_status", summary: "a pull request's checks, reviews and mergeability" },
-  { name: "generate_image", summary: "create an image file in your worktree" },
-];
-
-const FACTORY_TOOLS =
-  "Factory sessions also have `factory_report_reproduction`, `factory_submit_analysis`, `factory_submit_review`, `factory_plan_round`, `factory_file_issue`, `factory_report_findings` and `factory_record_decision` (only the ones your role is offered).";
-
-/** The skill file: when to use it, the exact command, and every tool it can run. */
-function skillMarkdown(script: string): string {
+/**
+ * The skill file: when to use it, the exact command, and every tool this session's role is
+ * offered (from the registry the MCP endpoint serves, passed in with `codeDenTools`).
+ */
+function skillMarkdown(script: string, tools: readonly CodeDenTool[]): string {
   const command = `node "${script}" <tool> '<json arguments>'`;
   return `---
 name: ${TOOL_SKILL_NAME}
-description: Run CodeDen's session tools (progress, questions, sharing, finishing, browser, GitHub, factory). Use this skill whenever you need a CodeDen tool. CodeDen's MCP server is not used in this session.
+description: Run the CodeDen tools this session is offered (progress, questions, sharing, finishing, browser, GitHub, factory, PM and orchestrator tools). Use this skill whenever you need a CodeDen tool. CodeDen's MCP server is not used in this session.
 ---
 
 # CodeDen tools
@@ -94,7 +50,8 @@ Every CodeDen tool is run through the bridge script in this skill, one tool per 
 ${command}
 \`\`\`
 
-- \`<tool>\` is one of the names below.
+- \`<tool>\` is one of the names below. They are the tools your role is offered; a tool your
+  role does not get is not listed here and will be refused.
 - \`'<json arguments>'\` is one shell-quoted JSON object, for example \`'{"text":"Reading the code"}'\`.
   Use \`'{}'\` for a tool without arguments.
 - The bridge prints the tool's result, and saves any images to files it names.
@@ -105,9 +62,7 @@ ${command}
 
 ## Tools
 
-${AGENT_TOOLS.map((tool) => `- \`${tool.name}\`: ${tool.summary}`).join("\n")}
-
-${FACTORY_TOOLS}
+${tools.map((tool) => `- \`${tool.name}\`: ${tool.summary}`).join("\n")}
 
 For anything else on GitHub (reading or editing issues, labels, checks, reviews) use the \`gh\`
 CLI, which is signed in as the user. GitHub has no API for uploading images, so \`gh\` can't
@@ -230,10 +185,14 @@ function folderName(sessionId: string): string {
 }
 
 /**
- * Write the plugin for one session to a fresh owner-only folder in the OS temp directory.
- * `remove()` deletes it; the caller must call it when the session closes.
+ * Write the plugin for one session to a fresh owner-only folder in the OS temp directory, with
+ * the tools the session's role is offered. `remove()` deletes it; the caller must call it when
+ * the session closes.
  */
-export function writeCopilotToolPlugin(opts: { sessionId: string }): CopilotToolPlugin {
+export function writeCopilotToolPlugin(opts: {
+  sessionId: string;
+  tools: readonly CodeDenTool[];
+}): CopilotToolPlugin {
   const dir = mkdtempSync(path.join(tmpdir(), `codeden-tools-${folderName(opts.sessionId)}-`));
   const remove = () => rmSync(dir, { recursive: true, force: true });
   try {
@@ -255,7 +214,9 @@ export function writeCopilotToolPlugin(opts: { sessionId: string }): CopilotTool
       )}\n`,
       { mode: 0o600 },
     );
-    writeFileSync(path.join(skillDir, "SKILL.md"), skillMarkdown(script), { mode: 0o600 });
+    writeFileSync(path.join(skillDir, "SKILL.md"), skillMarkdown(script, opts.tools), {
+      mode: 0o600,
+    });
     writeFileSync(script, BRIDGE_SCRIPT, { mode: 0o600 });
     return { dir, script, remove };
   } catch (error) {

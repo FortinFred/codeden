@@ -222,7 +222,7 @@ export class CopilotAdapter implements ProviderAdapter {
     // CodeDen's tools as a skill instead of MCP (company policies that block MCP): a plugin the
     // CLI opens from its command line, with the session token only in the agent's environment.
     const tools = opts.codeDenTools
-      ? writeCopilotToolPlugin({ sessionId: opts.sessionId })
+      ? writeCopilotToolPlugin({ sessionId: opts.sessionId, tools: opts.codeDenTools.tools })
       : undefined;
     const session = new AcpSession(
       tools && opts.codeDenTools

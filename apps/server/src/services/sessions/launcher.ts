@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import {
+  type CodeDenTool,
   type McpServerConfig,
   type Project,
   type Session,
@@ -12,6 +13,8 @@ import {
 } from "@codeden/contracts";
 import type { SandboxService } from "../../execution/sandboxes";
 import { codedenSystemPrompt, MCP_SERVER_NAME } from "../../mcp/prompt";
+import type { ToolRegistry } from "../../mcp/registry";
+import { toolSummary } from "../../mcp/summary";
 import type { McpTokenStore } from "../../mcp/tokens";
 import type { ArtifactService } from "../artifacts";
 import { errorMessage, ServiceError } from "../errors";
@@ -71,6 +74,11 @@ export interface LauncherDeps extends RunnerDeps {
    * instead of MCP. Absent means none (every session uses MCP).
    */
   agentTools?: () => { withoutMcp: readonly string[] };
+  /**
+   * The tool registry, so the skill channel documents the tools the session's own role is
+   * offered (the same list the MCP endpoint serves), not a fixed agent list.
+   */
+  tools?: () => Pick<ToolRegistry, "list">;
 }
 
 /**
@@ -395,7 +403,13 @@ export class SessionLauncher {
       artifactsDir: this.deps.artifacts?.sessionDir(session.id),
       mcpServers,
       ...(toolChannel === "skills" && proxyUrl && mcpToken
-        ? { codeDenTools: { url: proxyUrl, token: mcpToken } }
+        ? {
+            codeDenTools: {
+              url: proxyUrl,
+              token: mcpToken,
+              tools: this.skillTools(session),
+            },
+          }
         : {}),
       ...(ownBranch(session) ? { ownBranch: ownBranch(session) } : {}),
       ...(project?.agentCiEnv === false ? { ciEnv: false } : {}),
@@ -420,6 +434,20 @@ export class SessionLauncher {
       .providers()
       .find((p) => p.id === session.provider);
     return provider?.capabilities.toolSkills ? "skills" : "mcp";
+  }
+
+  /**
+   * The tools the session's role is offered, as the skill channel lists them: the registry's
+   * role-filtered list (the one the MCP endpoint serves), so a PM or orchestrator's skill
+   * documents its own tools and never an agent's.
+   */
+  private skillTools(session: Session): CodeDenTool[] {
+    const listed =
+      this.deps.tools?.().list(session.role, {
+        projectId: session.projectId,
+        sessionId: session.id,
+      }) ?? [];
+    return listed.map((tool) => ({ name: tool.name, summary: toolSummary(tool.description) }));
   }
 
   /**
