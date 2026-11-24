@@ -99,11 +99,12 @@ function mockAgentConfig(world: MockWorld): AgentConfigApi {
     diff: (req) => delay(naiveDiff(req.path, content(req), req.content), 100),
     listMcp: () => delay({ servers }),
     upsertMcp: (req) => {
-      const { spec, ...t } = req;
+      const { spec, provider, ...rest } = req;
+      if (provider === "copilot") throw new Error("Copilot MCP servers aren't edited here");
       servers = servers.filter(
-        (s) => !(s.provider === t.provider && s.scope === t.scope && s.name === t.name),
+        (s) => !(s.provider === provider && s.scope === rest.scope && s.name === rest.name),
       );
-      servers.push({ ...t, spec, file: "mock", projectId: t.projectId ?? null });
+      servers.push({ ...rest, provider, spec, file: "mock", projectId: rest.projectId ?? null });
       return delay({ file: "mock", backupPath: "~/.codeden/backups/agent-config/mock", servers });
     },
     removeMcp: (t) => {

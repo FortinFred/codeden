@@ -1,6 +1,5 @@
 import type {
   AgentConfigDiff,
-  AgentConfigProvider,
   McpConfigScope,
   McpServerEntry,
   McpServerTarget,
@@ -28,7 +27,7 @@ import { emptyMcpForm, formToSpec, type McpForm, mcpFormValid, specToForm } from
 import { McpTestResultView, useMcpTest } from "./mcp-test-result";
 import { PatchDialog } from "./patch-dialog";
 
-const SCOPES: Record<AgentConfigProvider, { value: McpConfigScope; label: string }[]> = {
+const SCOPES: Record<"claude" | "codex", { value: McpConfigScope; label: string }[]> = {
   claude: [
     { value: "user", label: "User" },
     { value: "local", label: "Local (this project, private)" },
@@ -67,7 +66,7 @@ export function McpServerDialog({
   onSaved: () => void;
 }) {
   const client = useClient();
-  const [provider, setProvider] = useState<AgentConfigProvider>("claude");
+  const [provider, setProvider] = useState<"claude" | "codex">("claude");
   const [scope, setScope] = useState<McpConfigScope>("user");
   const [name, setName] = useState("");
   const [form, setForm] = useState<McpForm>(emptyMcpForm);

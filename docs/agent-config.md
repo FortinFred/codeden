@@ -8,15 +8,15 @@ Open **Agents** from the sidebar or the command palette. It has five tabs: **Mem
 
 ## What's covered
 
-| | Claude Code | Codex |
-|---|---|---|
-| **Memory (user)** | `~/.claude/CLAUDE.md`, `~/.claude/rules/**/*.md` | `~/.codex/AGENTS.md` (and `AGENTS.override.md`) |
-| **Memory (project)** | `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md`, nested `CLAUDE.md` files, `.claude/rules/` | `AGENTS.md` files, including nested ones |
-| **Auto memory** | `~/.claude/projects/<project>/memory/` (or `autoMemoryDirectory` from `~/.claude/settings.json`); shared by all of a project's worktrees | |
-| **Skills** | `~/.claude/skills/<name>/SKILL.md`, `.claude/skills/` | `~/.codex/skills`, `~/.agents/skills`, `.agents/skills` |
-| **Subagents** | `~/.claude/agents/**/*.md`, `.claude/agents/` | `~/.codex/agents/*.toml`, `.codex/agents/` |
-| **MCP servers** | user (`~/.claude.json`), local (per project, in `~/.claude.json`), project (`.mcp.json`) | user (`~/.codex/config.toml`) |
-| **Hooks** | the `hooks` key of `~/.claude/settings.json` (user), `.claude/settings.json` (project) and `.claude/settings.local.json` (local) | |
+| | Claude Code | Codex | Copilot CLI |
+|---|---|---|---|
+| **Memory (user)** | `~/.claude/CLAUDE.md`, `~/.claude/rules/**/*.md` | `~/.codex/AGENTS.md` (and `AGENTS.override.md`) | `~/.copilot/copilot-instructions.md`, `~/.copilot/instructions/**/*.instructions.md` |
+| **Memory (project)** | `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md`, nested `CLAUDE.md` files, `.claude/rules/` | `AGENTS.md` files, including nested ones | `.github/copilot-instructions.md`, `.github/instructions/**/*.instructions.md`, and the `AGENTS.md`, `CLAUDE.md` (and `.claude/CLAUDE.md`) and `GEMINI.md` files it reads, nested ones included |
+| **Auto memory** | `~/.claude/projects/<project>/memory/` (or `autoMemoryDirectory` from `~/.claude/settings.json`); shared by all of a project's worktrees | | |
+| **Skills** | `~/.claude/skills/<name>/SKILL.md`, `.claude/skills/` | `~/.codex/skills`, `~/.agents/skills`, `.agents/skills` | `~/.copilot/skills`, `~/.agents/skills`, `.github/skills`, `.claude/skills`, `.agents/skills` |
+| **Subagents** | `~/.claude/agents/**/*.md`, `.claude/agents/` | `~/.codex/agents/*.toml`, `.codex/agents/` | `~/.copilot/agents/*.md`, `.github/agents/*.md` |
+| **MCP servers** | user (`~/.claude.json`), local (per project, in `~/.claude.json`), project (`.mcp.json`) | user (`~/.codex/config.toml`) | not edited yet (`~/.copilot/mcp-config.json`) |
+| **Hooks** | the `hooks` key of `~/.claude/settings.json` (user), `.claude/settings.json` (project) and `.claude/settings.local.json` (local) | | not edited yet (`.github/hooks/*.json`) |
 
 Nested scans skip dot-folders and build output.
 
@@ -33,7 +33,7 @@ New files start from a sensible template (a skill folder with `SKILL.md`, a suba
 
 ## Skills
 
-The **Skills** tab lists your user skills and, when a project is picked, the project's, for Claude Code and Codex. Create, edit and delete them like any other file.
+The **Skills** tab lists your user skills and, when a project is picked, the project's, for Claude Code, Codex and Copilot CLI. Create, edit and delete them like any other file.
 
 ### Switch skills on and off
 
@@ -47,6 +47,7 @@ Each skill has an on/off switch at the end of its row. Switching a skill off kee
 - **Claude Code** reads `~/.claude/settings.json` (user), `.claude/settings.json` (project) and `.claude/settings.local.json` (local), and the most specific file that names a skill decides it: local, then project, then user.
 - **The switch edits the file that already decides the skill**, so the change takes effect where it was set. When no file names it, the switch writes your user settings (`~/.claude/settings.json`), which reach every session, worktrees included. The dialog says where the change goes and who it applies to: you in every project, everyone using the repository, or only you in this project.
 - **Codex** has one file, `~/.codex/config.toml`, where the last entry that selects a skill decides it.
+- **Copilot CLI** skills are listed as on, without a switch: CodeDen doesn't write its `/skills` setting yet.
 - **Hover the switch** to see the file that sets the skill's state.
 
 **Diff and backup.** Like every other edit here, a switch shows the diff first, and nothing is written until you confirm. The old file is copied to `~/.codeden/backups/agent-config/` before it's overwritten, and the confirmation names the backup. Only the `skillOverrides` value or the `[[skills.config]]` entries change. Comments in `config.toml` are kept, and a change that would drop one is refused (edit that file by hand instead). A switch is also refused while a settings file that applies can't be parsed, or is a link that leads outside its folder, so CodeDen never writes a different file in its place.
@@ -121,6 +122,7 @@ For any session, **Details → What's loaded** shows which memory files, skills,
 
 - **Claude** walks every folder up from the working directory for `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md` and `.claude/rules`, adds the auto-memory `MEMORY.md`, and the project's skills and subagents up to the repo root.
 - **Codex** takes `AGENTS.override.md` or `AGENTS.md` in `~/.codex` and in each folder from the repo root down to the working directory.
+- **Copilot CLI** takes its user instructions and skills, then in each folder up from the working directory the `AGENTS.md`, `CLAUDE.md`, `.claude/CLAUDE.md`, `GEMINI.md` and `.github/copilot-instructions.md` files it reads plus `.github/instructions`, the skills in `.github/skills`, `.claude/skills` and `.agents/skills` up to the repo root, and the repository's custom agents in `.github/agents`.
 
 It's the quickest way to answer "why did the agent do that?" when an old rule is still in play.
 
