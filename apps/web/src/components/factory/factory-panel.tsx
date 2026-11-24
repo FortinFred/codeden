@@ -18,6 +18,7 @@ import { FactoryGuideButton } from "./factory-guide";
 import { KillSwitchButton } from "./kill-switch";
 import { LessonsCard } from "./lessons-card";
 import { LOOP_LABEL, MODE_LABEL } from "./meta";
+import { NewChangeButton } from "./new-change-dialog";
 import { PipelineDiagram } from "./pipeline-diagram";
 import { PullRequestsCard } from "./pull-requests-card";
 import { ScorecardCard } from "./scorecard-card";
@@ -142,6 +143,9 @@ export function FactoryPanel({ project }: { project: Project }) {
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-1">
           <OpenFactoryViewButton projectId={projectId} variant="outline" />
+          {f.tuning.workSource === "openspec" && project.kind === "github" && (
+            <NewChangeButton projectId={projectId} />
+          )}
           {f.loopState === "paused" && !f.drain && (
             <Button size="sm" onClick={() => resume.mutate()} disabled={resume.isPending}>
               <Play /> Resume

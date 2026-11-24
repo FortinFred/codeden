@@ -10,6 +10,8 @@ import {
   FactoryItem,
   FactoryLimits,
   FactoryLoop,
+  FactoryOpenSpecChangeRequest,
+  FactoryOpenSpecChangeResponse,
   FactoryStatus,
   FactoryTuning,
   FactoryTuningPatch,
@@ -20,6 +22,8 @@ import {
   KillSwitchRequest,
   KillSwitchResponse,
   Notice,
+  OPENSPEC_CHANGE_BODY_MAX,
+  OPENSPEC_CHANGE_TITLE_MAX,
   REVIEW_FOLLOW_UPS_MAX,
   REVIEW_SUMMARY_MAX,
   REVIEW_SUMMARY_TRUNCATED,
@@ -865,5 +869,31 @@ describe("factory API contracts (§10.1)", () => {
       data: { event: "digest", text: "Shipped 1" },
     });
     expect(notice.type === "factory.update" && notice.data.itemIds).toEqual([]);
+  });
+
+  it("validates a change created from the app and round-trips its response", () => {
+    expect(FactoryOpenSpecChangeRequest.parse({ title: "  Add gift cards  " })).toEqual({
+      title: "Add gift cards",
+      body: "",
+    });
+    expect(FactoryOpenSpecChangeRequest.safeParse({ title: "   " }).success).toBe(false);
+    expect(
+      FactoryOpenSpecChangeRequest.safeParse({
+        title: "x".repeat(OPENSPEC_CHANGE_TITLE_MAX + 1),
+      }).success,
+    ).toBe(false);
+    expect(
+      FactoryOpenSpecChangeRequest.safeParse({
+        title: "Add gift cards",
+        body: "b".repeat(OPENSPEC_CHANGE_BODY_MAX + 1),
+      }).success,
+    ).toBe(false);
+    const response = {
+      change: { id: "add-gift-cards", path: "openspec/changes/add-gift-cards" },
+      message: "Created openspec/changes/add-gift-cards; the change appears on the next check.",
+    };
+    expect(FactoryOpenSpecChangeResponse.parse(JSON.parse(JSON.stringify(response)))).toEqual(
+      response,
+    );
   });
 });

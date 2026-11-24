@@ -41,6 +41,17 @@ const delay = <T>(value: T, ms = 120): Promise<T> =>
 
 const now = () => new Date().toISOString();
 
+/** The folder id the server would derive from a title (mock: no file is written). */
+const openSpecChangeId = (title: string) =>
+  title
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 100)
+    .replace(/-+$/, "") || "change";
+
 const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
 
 /** The analysis of the mock's feature whose spec waits for approval. */
@@ -229,7 +240,13 @@ export function mockFactoryApi(world: MockWorld): FactoryApi {
     );
     const toWork = (w: FixtureWorkItem) => work(w, f.limits);
     // Spec approval is on where a spec waits for it.
-    const tuning = FactoryTuning.parse({ specApproval: f.inProgress.some((w) => w.specApproval) });
+    // `?openspec=1` in the mock UI's URL turns the work source to OpenSpec, so its New change
+    // action can be demoed; the real server reads the saved tuning.
+    const query = new URLSearchParams(globalThis.location?.search ?? "");
+    const tuning = FactoryTuning.parse({
+      specApproval: f.inProgress.some((w) => w.specApproval),
+      ...(query.get("openspec") ? { workSource: "openspec" } : {}),
+    });
     // The work-in-progress limit follows the agent limit (no `maxOpenPrs` set).
     const openPrs = f.inProgress.filter((w) => w.pr).length;
     // Builds without a PR take room too; a spec waiting for approval doesn't.
@@ -533,6 +550,14 @@ export function mockFactoryApi(world: MockWorld): FactoryApi {
         text: "Nothing shipped yet today.",
         createdAt: now(),
       };
+    },
+    async createOpenSpecChange(_projectId, req) {
+      const id = openSpecChangeId(req.title);
+      const path = `openspec/changes/${id}`;
+      return delay({
+        change: { id, path },
+        message: `Created ${path}; the change appears on the next factory check.`,
+      });
     },
     admit: async (id, req) => ({
       ...item(id, req.itemId),
