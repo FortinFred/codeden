@@ -267,6 +267,62 @@ describe("Copilot CLI's own path ask over ACP", () => {
     }
   });
 
+  it("trusts the session's own artifacts folder for reading, never for writing", async () => {
+    const artifacts = join(homedir(), "codeden-artifacts-home", "artifacts", "s1");
+    const shot = join(artifacts, "screenshot.png");
+    const elsewhere = join(homedir(), "codeden-artifacts-home", "elsewhere.png");
+    // Another session's artifacts folder is not this session's own.
+    const otherSession = join(homedir(), "codeden-artifacts-home", "artifacts", "s2", "shot.png");
+    const { reader } = await open(
+      [
+        // CodeDen hands the session its attachments and screenshots from this folder: reading
+        // one is no widening, so Copilot's ask must not reach the user.
+        readCall("own", shot),
+        pathAsk("own", shot),
+        // A read outside it, or in another session's folder, still asks.
+        readCall("other", elsewhere),
+        pathAsk("other", elsewhere),
+        readCall("other-session", otherSession),
+        pathAsk("other-session", otherSession),
+        // Only reading is trusted there: writing still asks (the folder is in CodeDen's home).
+        titledAsk("write", "edit", { path: shot }),
+        done,
+      ],
+      { artifactsDir: artifacts },
+    );
+    await reader.turn("Look at my screenshot");
+
+    expect(approvals(reader).map((a) => a.paths)).toEqual([[elsewhere], [otherSession], [shot]]);
+    expect(answers()).toEqual(["allow_once", "allow_once", "allow_once", "allow_once"]);
+  });
+
+  it("honours a remembered allow for a read path in a read-only session", async () => {
+    const outside = join(homedir(), "codeden-outside-the-worktree", "notes.md");
+    const other = join(homedir(), "codeden-elsewhere", "file.txt");
+    const { reader } = await open(
+      [
+        readCall("c1", outside),
+        pathAsk("c1", outside),
+        pathAsk("c2", outside),
+        readCall("c3", other),
+        pathAsk("c3", other),
+        done,
+      ],
+      { readOnly: true },
+    );
+    reader.answer = () =>
+      reader.asked.length === 1
+        ? { kind: "approval", decision: "allow_session" }
+        : { kind: "approval", decision: "deny" };
+    await reader.turn("Look outside");
+
+    // The option the card offers must stick for a path CodeDen judged safe: the second ask for
+    // the same read is answered without showing the card again. Another path still asks, and a
+    // deny still reaches Copilot as a rejection.
+    expect(approvals(reader).map((a) => a.paths)).toEqual([[outside], [other]]);
+    expect(answers()).toEqual(["allow_once", "allow_once", "reject_once"]);
+  });
+
   it("leaves reads inside the worktree, the extra folders and temp, and other kinds, alone", async () => {
     const extra = mkdtempSync(join(tmpdir(), "codeden-copilot-extra-"));
     const otherTemp = mkdtempSync(join(tmpdir(), "codeden-copilot-temp-"));
