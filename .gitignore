@@ -8,6 +8,8 @@ coverage/
 playwright-report/
 test-results/
 .codeden-dev/
+# The factory runtime's per-worktree state
+.factory/
 *.log
 .DS_Store
 .screenshots/
