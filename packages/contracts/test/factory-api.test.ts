@@ -677,6 +677,7 @@ describe("factory API contracts (§10.1)", () => {
     // A status from before the WIP limit reads as not holding anything back.
     expect(status.wip).toEqual({
       openPrs: 0,
+      building: 0,
       limit: 2,
       holding: false,
       waitingOnProvider: 0,
@@ -684,7 +685,7 @@ describe("factory API contracts (§10.1)", () => {
     });
     const holding = FactoryStatus.parse({
       ...status,
-      wip: { openPrs: 3, limit: 3, holding: true },
+      wip: { openPrs: 2, building: 1, limit: 3, holding: true },
     });
     expect(FactoryStatus.parse(JSON.parse(JSON.stringify(holding)))).toEqual(holding);
     // PRs waiting on a provider round-trip with the note that says so.

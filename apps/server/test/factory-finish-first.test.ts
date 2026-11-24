@@ -231,10 +231,51 @@ describe("the work-in-progress limit (maxOpenPrs)", () => {
     await tick();
     expect(item(a.id).stage).toBe("watching");
     expect(item(queued.id)).toMatchObject({ stage: "building", note: null });
-    expect((await status()).wip).toMatchObject({ openPrs: 1, limit: 2, holding: false });
+    // One PR open and the queued build now under way fill the limit, so the scout keeps waiting.
+    expect((await status()).wip).toMatchObject({
+      openPrs: 1,
+      building: 1,
+      limit: 2,
+      holding: true,
+    });
     expect(item(b.id).stage).toBe("verifying");
+    expect(loop().scout.round).toMatchObject({
+      phase: "reviewing",
+      heldSince: expect.any(String),
+    });
+
+    // B's PR merges too: only the build takes room now, so the scout reviews by itself and files.
+    await review(b.id);
+    await env.setStatus(reviewerOf(b.id), "idle");
+    await tick();
+    expect(item(b.id).stage).toBe("watching");
+    expect((await status()).wip).toMatchObject({ openPrs: 0, building: 1, holding: false });
     expect(lastMessageTo(scout.id)).toMatch(/\*\*Review by yourself now\*\*/);
     expect(loop().scout.round).toMatchObject({ phase: "filing", heldSince: null });
+  });
+
+  it("counts builds that haven't opened their PR yet against the limit", async () => {
+    env = createFactoryEnv({ limits: { maxConcurrentSessions: 4 } });
+    await enable("dark_factory", { tuning: { maxOpenPrs: 2 } });
+    // Two builds under way, neither with a PR yet: together they fill the limit.
+    const a = backlogItem("Add a counter", 3);
+    const b = backlogItem("Add a timer", 4);
+    await tick();
+    expect([item(a.id).stage, item(b.id).stage]).toEqual(["building", "building"]);
+    const queued = backlogItem("Add a clock", 5);
+    await tick();
+    expect(item(queued.id)).toMatchObject({
+      stage: "backlog",
+      note: "Waiting: finishing open work (0 of 2 PRs open, 2 more being built)",
+    });
+    expect((await status()).wip).toMatchObject({
+      openPrs: 0,
+      building: 2,
+      limit: 2,
+      holding: true,
+    });
+    // The scout's own guard sees the same limit, so "Run scout now" is refused.
+    await expect(env.factory.runScout(env.project.id)).rejects.toThrow(/Finishing open work/);
   });
 
   it("keeps a held round's findings past the round timeout and files them once a PR merges", async () => {
