@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   CircleDot,
   Factory,
+  FileText,
   GitPullRequest,
   Lightbulb,
   ShieldAlert,
@@ -179,10 +180,18 @@ export function FactoryItemPage({ projectId, itemId }: { projectId: string; item
               </div>
             )}
             <section>
-              <SectionLabel className="mb-2">The issue</SectionLabel>
+              <SectionLabel className="mb-2">
+                {item.openspecChange ? "The OpenSpec change" : "The issue"}
+              </SectionLabel>
               <p className="text-[13px] leading-relaxed whitespace-pre-wrap">
                 {item.summary || item.title}
               </p>
+              {item.openspecChange && (
+                <p className="mt-2 flex items-center gap-1.5 font-mono text-2xs text-muted-foreground">
+                  <FileText className="size-3 shrink-0" aria-hidden />
+                  {item.openspecChange.path}/proposal.md
+                </p>
+              )}
             </section>
             <InvestigationCard item={item} />
             {item.acceptanceCriteria.length > 0 && (
@@ -284,6 +293,11 @@ export function FactoryItemPage({ projectId, itemId }: { projectId: string; item
                 "—"
               )}
             </Fact>
+            {item.openspecChange && (
+              <Fact label="Change">
+                <code className="font-mono text-2xs">{item.openspecChange.id}</code>
+              </Fact>
+            )}
             <Fact label="Pull request">
               {item.pr ? (
                 <button

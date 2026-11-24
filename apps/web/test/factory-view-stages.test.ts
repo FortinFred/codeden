@@ -37,6 +37,7 @@ function w(id: string, n: number, patch: Partial<FactoryWorkItem>): FactoryWorkI
     title: `Item ${n}`,
     workKey: `issue:${n}`,
     issue: { number: n, url: url(n) },
+    openspecChange: null,
     pr: null,
     score: null,
     sessionId: null,

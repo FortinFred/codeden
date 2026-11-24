@@ -1,4 +1,9 @@
-import type { FactoryLimits, FactoryTuning, MergePolicy } from "@codeden/contracts";
+import type {
+  FactoryLimits,
+  FactoryTuning,
+  FactoryWorkSource,
+  MergePolicy,
+} from "@codeden/contracts";
 import { useId, useState } from "react";
 import { Field } from "@/components/automations/form-bits";
 import { NumberField } from "@/components/common/number-field";
@@ -29,6 +34,7 @@ export type TuningDraft = AgentsDraft &
     | "learnFromReviews"
     | "specApproval"
     | "spotCheckPercent"
+    | "workSource"
   >;
 
 /** The editable tuning knobs of a saved tuning. */
@@ -44,6 +50,7 @@ export function tuningDraft(t: FactoryTuning): TuningDraft {
     learnFromReviews: t.learnFromReviews,
     specApproval: t.specApproval,
     spotCheckPercent: t.spotCheckPercent,
+    workSource: t.workSource,
     minBacklog: t.minBacklog,
     discoveryIntervalMin: t.discoveryIntervalMin,
     discoveryPerRound: t.discoveryPerRound,
@@ -104,6 +111,7 @@ export function LimitsEditor({
   onTuningChange,
   githubLogin,
   dark = false,
+  openspecAvailable = true,
 }: {
   limits: FactoryLimits;
   onChange: (l: FactoryLimits) => void;
@@ -113,6 +121,8 @@ export function LimitsEditor({
   githubLogin?: string | null;
   /** Show the dark factory's scout limits. */
   dark?: boolean;
+  /** Whether the OpenSpec work source can be picked (GitHub projects only). */
+  openspecAvailable?: boolean;
 }) {
   const id = useId();
   const [authors, setAuthors] = useState(() => limits.trustedAuthors.join("\n"));
@@ -175,6 +185,27 @@ export function LimitsEditor({
             </span>
           </span>
         </div>
+      )}
+      {tuning && onTuningChange && (
+        <Field
+          label="Work source"
+          htmlFor={`${id}-work-source`}
+          help="Where the factory finds work. GitHub issues come from trusted authors. An OpenSpec change is a folder under openspec/changes/ with its proposal, design, spec deltas and tasks; the pull request carries them. Pull requests, CI, review and merge still run on GitHub."
+        >
+          <select
+            id={`${id}-work-source`}
+            className={SELECT}
+            value={tuning.workSource}
+            onChange={(e) =>
+              onTuningChange({ ...tuning, workSource: e.target.value as FactoryWorkSource })
+            }
+          >
+            <option value="github">GitHub issues</option>
+            <option value="openspec" disabled={!openspecAvailable}>
+              OpenSpec changes (openspec/changes/)
+            </option>
+          </select>
+        </Field>
       )}
       <Field
         label="Trusted authors"

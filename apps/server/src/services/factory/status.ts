@@ -44,6 +44,7 @@ export function workItem(
     title: i.title,
     workKey: i.workKey,
     issue: i.issue,
+    openspecChange: i.openspecChange,
     pr: i.pr,
     score: i.score,
     sessionId: i.builderSessionId,

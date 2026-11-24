@@ -17,6 +17,14 @@ function clip(text: string, max: number): string {
   return t.length > max ? `${t.slice(0, max)}… (cut)` : t;
 }
 
+/** What the item tracks, for a brief that has none of the builder's context. */
+function workItemName(item: FactoryItem): string {
+  if (item.issue) return `issue #${item.issue.number} (${item.issue.url})`;
+  if (item.openspecChange)
+    return `OpenSpec change \`${item.openspecChange.id}\` (\`${item.openspecChange.path}/\`)`;
+  return "its work item";
+}
+
 function criteria(item: FactoryItem): string {
   return item.acceptanceCriteria.length > 0
     ? item.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join("\n")
@@ -57,7 +65,7 @@ export function integratorPrompt(
   base: string,
   task: IntegratorTask = "conflicts",
 ): string {
-  const issue = item.issue ? `issue #${item.issue.number} (${item.issue.url})` : "its work item";
+  const issue = workItemName(item);
   const review = item.review
     ? `The independent reviewer's last verdict was **${item.review.verdict}**:\n<review>\n${clip(item.review.summary, MAX_REVIEW)}\n</review>`
     : "No review verdict yet.";
@@ -145,7 +153,7 @@ function newCommitsPrompt(
 export function continuePrompt(item: FactoryItem): string {
   const spec = specResumeStep(item);
   return [
-    `**Continue**: your session for ${item.issue ? `issue #${item.issue.number}` : "this work item"} (**${item.title}**) stopped because of a problem outside your work, such as the session ending unexpectedly. It is fixed, so pick up where you left off.`,
+    `**Continue**: your session for ${item.issue ? `issue #${item.issue.number}` : item.openspecChange ? `OpenSpec change \`${item.openspecChange.id}\`` : "this work item"} (**${item.title}**) stopped because of a problem outside your work, such as the session ending unexpectedly. It is fixed, so pick up where you left off.`,
     spec ??
       "Check what is already done (`git status`, `git log`), finish your current step, and once the change is ready open the pull request with `create_pull_request` and call `finish`.",
     FOREGROUND_COMMANDS,

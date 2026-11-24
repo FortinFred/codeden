@@ -188,10 +188,12 @@ export function AutonomyDialog({
                 </Requirement>
               </ul>
               <p className="mt-3 text-3xs leading-relaxed text-muted-foreground">
-                Issues are classified as a bug, a feature or a docs change and each runs its own
-                pipeline: reproduce, fix and review a bug; analyze, implement and review a feature;
-                change the docs. Every pull request carries its test results, and screenshots for UI
-                changes.
+                GitHub issues are classified as a bug, a feature or a docs change and each runs its
+                own pipeline: reproduce, fix and review a bug; analyze, implement and review a
+                feature; change the docs. With an OpenSpec work source, the change folders under{" "}
+                <code className="font-mono">openspec/changes/</code> are features, and their
+                proposal, design, spec and tasks travel in the pull request. Every pull request
+                carries its test results, and screenshots for UI changes.
               </p>
             </div>
             <LimitsEditor
@@ -201,6 +203,7 @@ export function AutonomyDialog({
               onTuningChange={setTuning}
               githubLogin={status.data?.githubLogin ?? null}
               dark={mode === "dark_factory"}
+              openspecAvailable={github}
             />
           </div>
         )}

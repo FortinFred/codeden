@@ -13,7 +13,7 @@ import { budgetSpend, type FactoryContext, visionOf } from "./context";
 import { advanceDrain } from "./drain";
 import { fileDueFollowUps } from "./follow-ups";
 import { itemHeld, settleHolds } from "./hold";
-import { classifyPending, intakeFailedChecks, intakeIssues } from "./intake";
+import { classifyPending, intakeFailedChecks, intakeIssues, intakeOpenSpec } from "./intake";
 import { enforceItemBudgets } from "./item-budget";
 import { settleLateStarts } from "./late-start";
 import { briefLessons } from "./lessons";
@@ -179,7 +179,10 @@ export async function runTick(
   // rebuild). The slot order (`slots.ts`) is the same; nothing else is in it.
   const drained = loop.drain ? new Set(loop.drain.itemIds) : undefined;
   if (!drained) {
-    loop = await intakeIssues(ctx, project, loop);
+    loop =
+      loop.tuning.workSource === "openspec"
+        ? intakeOpenSpec(ctx, project, loop)
+        : await intakeIssues(ctx, project, loop);
     loop = await intakeFailedChecks(ctx, project, loop);
     await classifyPending(ctx, project);
   }
