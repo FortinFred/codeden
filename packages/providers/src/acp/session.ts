@@ -199,6 +199,11 @@ export class AcpSession implements ProviderSession {
     this.mapper.endTurn({ type: "interrupted" });
     this.events.close();
     await this.rpc?.close();
+    try {
+      this.config.onClosed?.();
+    } catch {
+      // A file the adapter generated is best-effort cleanup; the session is closed either way.
+    }
   }
 
   // ---------------------------------------------------------------- internals
@@ -251,6 +256,7 @@ export class AcpSession implements ProviderSession {
 
   private async boot(): Promise<AcpRpc> {
     const { spec } = this.config;
+    const args = [...spec.args, ...(this.config.extraArgs ?? [])];
     // Set once the handshake is done: an exit during it rejects `startAgent` instead.
     let started: AcpRpc | undefined;
     const { rpc, info } = await startAgent(
@@ -263,7 +269,7 @@ export class AcpSession implements ProviderSession {
         },
       },
       {
-        args: spec.args,
+        args,
         label: spec.label,
         ...(spec.authMethod ? { authMethod: spec.authMethod } : {}),
         ...(spec.authGuard

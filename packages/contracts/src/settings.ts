@@ -122,6 +122,17 @@ export const Settings = z.object({
       autoSwitchOnLimit: z.boolean().default(true),
     })
     .prefault({}),
+  /**
+   * How agents receive CodeDen's own tools (§8.3). By default they come from CodeDen's MCP
+   * server. A provider listed in `withoutMcp` gives its sessions the tools as a local plugin
+   * skill and a bridge script instead, for companies whose provider policy blocks MCP servers
+   * (Copilot CLI first). Only providers with `ProviderCapabilities.toolSkills` can be listed.
+   */
+  agentTools: z
+    .object({
+      withoutMcp: z.array(ProviderId).default([]),
+    })
+    .prefault({}),
   /** Small, cheap model for side jobs (§7.4). */
   utilityModel: z
     .object({

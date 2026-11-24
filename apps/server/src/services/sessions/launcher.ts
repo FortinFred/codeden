@@ -66,6 +66,11 @@ export interface LauncherDeps extends RunnerDeps {
   sandboxes?: Pick<SandboxService, "wants" | "place" | "release">;
   /** The token saver settings (`Settings.tokenSaver`, #602); absent means off. */
   tokenSaver?: () => TokenSaverSettings;
+  /**
+   * Settings.agentTools: providers whose sessions get CodeDen's tools from a plugin skill
+   * instead of MCP. Absent means none (every session uses MCP).
+   */
+  agentTools?: () => { withoutMcp: readonly string[] };
 }
 
 /**
@@ -359,9 +364,11 @@ export class SessionLauncher {
    */
   sessionOptions(session: Session, mcpToken: string | null = null): SessionOptions {
     const project = this.projectOf(session);
-    const proxyUrl = runnerForSession(this.deps, session.id).mcpProxyUrl();
+    const runner = runnerForSession(this.deps, session.id);
+    const proxyUrl = runner.mcpProxyUrl();
+    const toolChannel = this.toolChannel(session, proxyUrl, mcpToken);
     const mcpServers: McpServerConfig[] = [];
-    if (proxyUrl && mcpToken) {
+    if (proxyUrl && mcpToken && toolChannel === "mcp") {
       mcpServers.push({
         transport: "http",
         name: MCP_SERVER_NAME,
@@ -380,16 +387,39 @@ export class SessionLauncher {
       autonomy: session.autonomy,
       planMode: session.planMode ?? false,
       resumeToken: session.resumeToken ?? undefined,
-      systemPrompt: this.systemPrompt(session, project),
+      systemPrompt: this.systemPrompt(session, project, toolChannel),
       // The orchestrator and PMs never write project code (§11.2). Agent sessions at the
       // `read_only` level carry it in `autonomy`, so it can change live.
       readOnly: session.role !== "agent",
       codedenHome: this.deps.home,
       artifactsDir: this.deps.artifacts?.sessionDir(session.id),
       mcpServers,
+      ...(toolChannel === "skills" && proxyUrl && mcpToken
+        ? { codeDenTools: { url: proxyUrl, token: mcpToken } }
+        : {}),
       ...(ownBranch(session) ? { ownBranch: ownBranch(session) } : {}),
       ...(project?.agentCiEnv === false ? { ciEnv: false } : {}),
     });
+  }
+
+  /**
+   * How this session reaches CodeDen's tools: MCP, unless the user chose the skill channel for
+   * its provider (`Settings.agentTools.withoutMcp`) and that provider supports it
+   * (`ProviderCapabilities.toolSkills`). Without a proxy URL or token there is nothing to
+   * deliver, so the session stays on MCP (no CodeDen tools either way).
+   */
+  private toolChannel(
+    session: Session,
+    proxyUrl: string | null,
+    mcpToken: string | null,
+  ): "mcp" | "skills" {
+    if (!proxyUrl || !mcpToken) return "mcp";
+    const withoutMcp = this.deps.agentTools?.().withoutMcp ?? [];
+    if (!withoutMcp.includes(session.provider)) return "mcp";
+    const provider = runnerForSession(this.deps, session.id)
+      .providers()
+      .find((p) => p.id === session.provider);
+    return provider?.capabilities.toolSkills ? "skills" : "mcp";
   }
 
   /**
@@ -397,8 +427,12 @@ export class SessionLauncher {
    * goes only to providers with `capabilities.systemPrompt`, where it holds on resume and after
    * compaction; the others get CodeDen's prompt unchanged.
    */
-  private systemPrompt(session: Session, project: Project | null): string {
-    const base = codedenSystemPrompt(session, project);
+  private systemPrompt(
+    session: Session,
+    project: Project | null,
+    toolChannel: "mcp" | "skills" = "mcp",
+  ): string {
+    const base = codedenSystemPrompt(session, project, { toolChannel });
     const settings = this.deps.tokenSaver?.();
     if (!settings) return base;
     const provider = runnerForSession(this.deps, session.id)

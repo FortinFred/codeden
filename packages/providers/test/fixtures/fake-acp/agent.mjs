@@ -31,6 +31,7 @@ const log = process.env.FAKE_ACP_LOG;
 const record = (entry) => {
   if (log) appendFileSync(log, `${JSON.stringify(entry)}\n`);
 };
+record({ method: "argv", params: { args } });
 
 if (args[0] === "--version") {
   console.log(process.env.FAKE_ACP_VERSION ?? "2026.10.22-abc1234");

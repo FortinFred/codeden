@@ -472,3 +472,23 @@ Should I also remove the old cookie?`;
     expect(renderNotices([finished])).toContain('Should I also remove the old cookie?"');
   });
 });
+
+describe("CodeDen tools as a skill (company MCP policy)", () => {
+  it("names the plugin skill instead of the MCP server, for agents and roles", () => {
+    const skills = agentPrompt(agent(), github, { toolChannel: "skills" });
+    expect(skills).toContain("MCP is off for this provider");
+    expect(skills).toContain("`codeden-tools` skill");
+    expect(skills).not.toContain("CodeDen tools are on the `codeden` MCP server");
+    expect(codedenSystemPrompt(agent(), github, { toolChannel: "skills" })).toBe(skills);
+
+    const pm = codedenSystemPrompt(agent({ role: "pm" }), github, { toolChannel: "skills" });
+    expect(pm).toContain("`codeden-tools` skill");
+    expect(pm).not.toContain("CodeDen MCP tools");
+    expect(pm).not.toContain("on the `codeden` MCP server");
+  });
+
+  it("keeps the MCP wording exactly when nothing chooses the skill channel", () => {
+    expect(agentPrompt(agent(), github)).toContain("CodeDen tools are on the `codeden` MCP server");
+    expect(codedenSystemPrompt(agent({ role: "pm" }), github)).toBe(rolePrompt("pm"));
+  });
+});

@@ -127,6 +127,16 @@ export interface AcpAgentSpec {
 export interface AcpSessionConfig {
   executable: ResolvedCommand;
   spec: AcpAgentSpec;
+  /**
+   * Extra arguments after the agent's own (`AcpAgentSpec.args`): a local plugin folder the
+   * adapter generated for this session, say (`--plugin-dir <dir>`, CodeDen's skill channel).
+   */
+  extraArgs?: readonly string[];
+  /**
+   * Called once when the session closes (closed, or failed to start): the adapter removes the
+   * files it generated for it (CodeDen's tool plugin folder).
+   */
+  onClosed?: () => void;
   /** The agent reported its session setup (models, modes): for the adapter's model list. */
   onSetup?: (setup: AcpSessionSetup, info: AcpInitializeResult) => void;
   startTimeoutMs?: number;
