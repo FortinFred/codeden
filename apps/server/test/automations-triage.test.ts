@@ -210,6 +210,12 @@ describe("issue triage (§10)", () => {
     }
     // Skipped before the executor runs: the PM is never handed these issues by the automation.
     expect((await runsOf()).length).toBe(before + 2);
+    // ...and the skip stays in the Runs tab without waking the PM: no `automation.skipped` notice.
+    expect(
+      h.server.services.orchestration.notices
+        .list({ projectId: GH })
+        .filter((n) => n.type === "automation.skipped"),
+    ).toEqual([]);
     h.server.services.store.append([
       { type: "project.updated", sessionId: null, payload: { project: Project.parse(project) } },
     ]);
