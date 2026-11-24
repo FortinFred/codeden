@@ -1,7 +1,16 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Project } from "@codeden/contracts";
+import { OPENSPEC_CHANGE_ROOT_UNSAFE, type Project } from "@codeden/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   openSpecChangeId,
@@ -87,5 +96,54 @@ describe("OpenSpec folder left behind by an interrupted write", () => {
       /already exists/,
     );
     expect(readFileSync(join(dir, "proposal.md"), "utf8")).toBe("# Add login\n\nKeep me.\n");
+  });
+});
+
+describe("OpenSpec change folders that are symbolic links", () => {
+  it("refuses a symlinked change folder and writes nothing through it", () => {
+    const p = project();
+    const outside = mkdtempSync(join(tmpdir(), "codeden-openspec-outside-"));
+    roots.push(outside);
+    symlinkSync(outside, join(changesRoot(p), "add-login"), "dir");
+    expect(() => writeOpenSpecChange(p, { title: "Add login", body: "Users sign in." })).toThrow(
+      expect.objectContaining({ status: 409, code: OPENSPEC_CHANGE_ROOT_UNSAFE }),
+    );
+    expect(readdirSync(outside)).toEqual([]);
+  });
+
+  it("refuses a symlinked change folder whose target holds a proposal, leaving it alone", () => {
+    const p = project();
+    const outside = mkdtempSync(join(tmpdir(), "codeden-openspec-outside-"));
+    roots.push(outside);
+    writeFileSync(join(outside, "proposal.md"), "# Add login\n\nOutside.\n");
+    symlinkSync(outside, join(changesRoot(p), "add-login"), "dir");
+    expect(() => writeOpenSpecChange(p, { title: "Add login", body: "Users sign in." })).toThrow(
+      expect.objectContaining({ status: 409, code: OPENSPEC_CHANGE_ROOT_UNSAFE }),
+    );
+    expect(readdirSync(outside)).toEqual(["proposal.md"]);
+    expect(readFileSync(join(outside, "proposal.md"), "utf8")).toBe("# Add login\n\nOutside.\n");
+  });
+
+  it("does not read changes through a symlinked change folder", () => {
+    const p = project();
+    const outside = mkdtempSync(join(tmpdir(), "codeden-openspec-outside-"));
+    roots.push(outside);
+    writeFileSync(join(outside, "proposal.md"), "# Add login\n\nOutside.\n");
+    symlinkSync(outside, join(changesRoot(p), "add-login"), "dir");
+    expect(readOpenSpecChanges(p)).toEqual([]);
+  });
+
+  it("does not read changes through a symlinked openspec folder", () => {
+    const root = mkdtempSync(join(tmpdir(), "openspec-"));
+    roots.push(root);
+    const outside = mkdtempSync(join(tmpdir(), "codeden-openspec-outside-"));
+    roots.push(outside);
+    mkdirSync(join(outside, "changes", "add-login"), { recursive: true });
+    writeFileSync(
+      join(outside, "changes", "add-login", "proposal.md"),
+      "# Add login\n\nOutside.\n",
+    );
+    symlinkSync(outside, join(root, "openspec"), "dir");
+    expect(readOpenSpecChanges({ path: root } as Project)).toEqual([]);
   });
 });
