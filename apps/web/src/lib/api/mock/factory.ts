@@ -137,6 +137,7 @@ function work(w: FixtureWorkItem, limits?: Pick<FactoryLimits, "itemBudget">): F
     title: w.title,
     workKey: w.workKey,
     issue: w.issue,
+    openspecChange: null,
     pr: w.pr,
     score: w.score ?? null,
     sessionId: w.sessionId ?? null,

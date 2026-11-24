@@ -26,6 +26,7 @@ function w(id: string, n: number, patch: Partial<FactoryWorkItem>): FactoryWorkI
     title: `Item ${n}`,
     workKey: `issue:${n}`,
     issue: { number: n, url: `https://github.com/acme/shop/issues/${n}` },
+    openspecChange: null,
     pr: null,
     score: null,
     sessionId: null,

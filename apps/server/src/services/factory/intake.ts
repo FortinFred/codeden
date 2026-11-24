@@ -10,6 +10,7 @@ import { errorMessage } from "../errors";
 import { classifyIssue, TYPE_LABEL } from "./classify";
 import type { FactoryContext } from "./context";
 import { issueHeld, itemHeld } from "./hold";
+import { readOpenSpecChanges } from "./openspec";
 import { slugify } from "./policy";
 import { isTrustedAuthor, trustedLogins } from "./trust";
 
@@ -112,6 +113,45 @@ export async function intakeIssues(
         note: `@${i.author} is now a trusted author`,
       }));
     }
+  }
+  return loop;
+}
+
+/**
+ * OpenSpec intake: each change folder under the project's `openspec/changes/` becomes a feature
+ * item, already classified and trusted (the files are local). No GitHub issue is created or
+ * commented on: the change folder is what the item tracks. A change is taken in once per work
+ * key, so a merged change that stays in the folder is not queued again.
+ */
+export function intakeOpenSpec(
+  ctx: FactoryContext,
+  project: Project,
+  loop: FactoryLoop,
+): FactoryLoop {
+  const known = new Set(ctx.store.items(project.id).map((i) => i.workKey));
+  for (const change of readOpenSpecChanges(project)) {
+    const workKey = `openspec:${change.ref.id}`;
+    if (known.has(workKey)) continue;
+    ctx.store.createItem({
+      projectId: project.id,
+      workKey,
+      title: change.title,
+      summary: change.body,
+      source: "openspec",
+      stage: "backlog",
+      type: "feature",
+      classification: {
+        type: "feature",
+        confidence: "high",
+        rationale: "An OpenSpec change proposes new or changed behaviour.",
+        by: "system",
+        at: ctx.now().toISOString(),
+      },
+      trust: "trusted",
+      score: null,
+      openspecChange: change.ref,
+    });
+    known.add(workKey);
   }
   return loop;
 }

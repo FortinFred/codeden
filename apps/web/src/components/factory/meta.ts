@@ -141,6 +141,7 @@ export const PR_STATE_LABEL: Record<FactoryPrState, { label: string; tone: Tone;
 export const SOURCE_LABEL: Record<FactoryItemSource, string> = {
   discovery: "Dark factory scout",
   issue: "GitHub issue",
+  openspec: "OpenSpec change",
   failed_check: "Failed check on main",
   revert: "Revert",
 };

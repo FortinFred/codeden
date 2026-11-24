@@ -95,6 +95,11 @@ export function IgnoredColumn({
                 #{w.issue.number}
               </span>
             )}
+            {w.openspecChange && (
+              <span className="shrink-0 font-mono text-3xs text-muted-foreground">
+                {w.openspecChange.id}
+              </span>
+            )}
             <span className="truncate text-muted-foreground" title={w.title}>
               {w.title}
             </span>

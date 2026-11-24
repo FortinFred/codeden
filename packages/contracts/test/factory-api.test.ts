@@ -73,6 +73,7 @@ const item: FactoryItem = {
     sentAt: ts,
   },
   issue: { number: 3, url: "https://github.com/acme/app/issues/3" },
+  openspecChange: null,
   pr: { number: 4, url: "https://github.com/acme/app/pull/4", state: "open" },
   builderSessionId: "s1",
   builderProvider: "claude",
@@ -159,6 +160,19 @@ describe("factory API contracts (§10.1)", () => {
     };
     expect(FactoryItem.parse(JSON.parse(JSON.stringify(rebuilt)))).toEqual(rebuilt);
     expect(FactoryItem.safeParse({ ...item, failureKind: "flaky" }).success).toBe(false);
+    // An OpenSpec item has no issue: its change folder is what it tracks.
+    const openspec = {
+      ...item,
+      issue: null,
+      source: "openspec" as const,
+      workKey: "openspec:add-login",
+      openspecChange: { id: "add-login", path: "openspec/changes/add-login" },
+    };
+    expect(FactoryItem.parse(JSON.parse(JSON.stringify(openspec)))).toEqual(openspec);
+    // Items saved before the work source existed get GitHub and no change.
+    const beforeWorkSource = { ...item, source: "issue" as const };
+    delete (beforeWorkSource as Partial<FactoryItem>).openspecChange;
+    expect(FactoryItem.parse(beforeWorkSource).openspecChange).toBeNull();
     const loop = FactoryLoop.parse({
       projectId: "p1",
       state: "building",
@@ -253,7 +267,14 @@ describe("factory API contracts (§10.1)", () => {
       reviewerModel: null,
       reviewerFallback: "builder",
       specApproval: false,
+      workSource: "github",
     });
+    expect(FactoryTuning.parse({ workSource: "openspec" }).workSource).toBe("openspec");
+    expect(FactoryTuning.safeParse({ workSource: "files" }).success).toBe(false);
+    expect(
+      SetAutonomyModeRequest.parse({ mode: "dark_factory", tuning: { workSource: "openspec" } })
+        .tuning,
+    ).toEqual({ workSource: "openspec" });
     // Turning spec approval on carries only that knob.
     expect(
       SetAutonomyModeRequest.parse({ mode: "software_factory", tuning: { specApproval: true } })

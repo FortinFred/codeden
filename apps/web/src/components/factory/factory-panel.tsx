@@ -128,9 +128,9 @@ export function FactoryPanel({ project }: { project: Project }) {
             {f.experimental && <ExperimentalBadge />}
           </div>
           <div className="text-2xs text-muted-foreground">
-            {f.mode === "dark_factory"
-              ? "The scout and trusted issues feed the pipelines; "
-              : "Trusted GitHub issues feed the pipelines; "}
+            {f.mode === "dark_factory" ? "The scout and " : ""}
+            {f.tuning.workSource === "openspec" ? "OpenSpec changes" : "trusted GitHub issues"} feed
+            the pipelines;{" "}
             {f.limits.autoMerge
               ? "CodeDen merges when every check passes."
               : "you merge the pull requests."}

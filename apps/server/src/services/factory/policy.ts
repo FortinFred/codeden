@@ -47,6 +47,7 @@ const QUEUE_TIER: Record<FactoryItemSource, number> = {
   failed_check: 0,
   revert: 0,
   issue: 1,
+  openspec: 1,
   discovery: 2,
 };
 

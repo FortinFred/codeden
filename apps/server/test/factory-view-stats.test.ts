@@ -28,6 +28,7 @@ const base: FactoryItem = {
   investigation: null,
   specApproval: null,
   issue: null,
+  openspecChange: null,
   pr: null,
   builderSessionId: null,
   builderProvider: null,
