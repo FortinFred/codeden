@@ -233,6 +233,17 @@ export const INVALID_COPY_SUFFIX = ".invalid-";
  */
 export const CODEDEN_MCP_CONFIG_DIR = "runner/mcp";
 
+/**
+ * One CodeDen tool as the skill channel lists it: the name the bridge script takes, and a
+ * one-line summary for the agent. The list is the session role's own, from the same registry
+ * the MCP endpoint serves.
+ */
+export const CodeDenTool = z.object({
+  name: z.string().min(1),
+  summary: z.string().min(1),
+});
+export type CodeDenTool = z.infer<typeof CodeDenTool>;
+
 /** Options for `ProviderAdapter.openSession`. */
 export const SessionOptions = z.object({
   /** CodeDen session id. */
@@ -259,13 +270,19 @@ export const SessionOptions = z.object({
   /**
    * CodeDen's tool channel for a session whose provider gets its tools from a skill instead of
    * MCP (`ProviderCapabilities.toolSkills`, `Settings.agentTools.withoutMcp`): the loopback tool
-   * endpoint (the runner's MCP proxy URL) and this session's freshly minted role-scoped token.
+   * endpoint (the runner's MCP proxy URL), this session's freshly minted role-scoped token, and
+   * the tools that role is offered, which the skill documents.
    * A provider hands it to the skill's bridge script, never to the agent as an MCP server.
    */
   codeDenTools: z
     .object({
       url: z.url(),
       token: z.string().min(1),
+      /**
+       * The tools this session's role is offered (`ToolRegistry.list`): the skill documents
+       * exactly these, so a PM or orchestrator is never pointed at an agent's tools.
+       */
+      tools: z.array(CodeDenTool),
     })
     .optional(),
   /** Extra env vars for the agent process (CodeDen secrets are never included). */

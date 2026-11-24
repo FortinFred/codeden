@@ -1,5 +1,9 @@
-import type { ProviderInfo } from "@codeden/contracts";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import type { ProviderInfo, Role } from "@codeden/contracts";
+import { writeCopilotToolPlugin } from "@codeden/providers";
 import { describe, expect, it } from "vitest";
+import { allTools } from "../src/mcp/tools";
 import { type LauncherDeps, SessionLauncher } from "../src/services/sessions/launcher";
 import { sampleSession } from "./helpers";
 
@@ -41,6 +45,16 @@ function launcher(opts: { toolSkills: boolean; withoutMcp: readonly string[] }) 
       },
     },
     agentTools: () => ({ withoutMcp: opts.withoutMcp }),
+    tools: () => ({
+      list: (role: Role) =>
+        allTools
+          .filter((tool) => tool.roles.includes(role))
+          .map((tool) => ({
+            name: tool.name,
+            description: tool.description,
+            inputSchema: { type: "object" as const },
+          })),
+    }),
   } as unknown as LauncherDeps);
 }
 
@@ -53,7 +67,8 @@ describe("the skill channel for CodeDen's tools", () => {
       TOKEN,
     );
     expect(opts.mcpServers).toEqual([]);
-    expect(opts.codeDenTools).toEqual({ url: PROXY, token: TOKEN });
+    expect(opts.codeDenTools).toMatchObject({ url: PROXY, token: TOKEN });
+    expect(opts.codeDenTools?.tools.map((tool) => tool.name)).toContain("finish");
     expect(opts.systemPrompt).toContain("`codeden-tools` skill");
     expect(opts.systemPrompt).toContain("MCP is off for this provider");
     expect(opts.systemPrompt).not.toContain("CodeDen tools are on the `codeden` MCP server");
@@ -79,5 +94,61 @@ describe("the skill channel for CodeDen's tools", () => {
     const opts = launcher({ toolSkills: true, withoutMcp: ["copilot"] }).sessionOptions(session);
     expect(opts.mcpServers).toEqual([]);
     expect(opts.codeDenTools).toBeUndefined();
+  });
+});
+
+describe("the skill's tool list follows the session's role", () => {
+  /** The SKILL.md the Copilot adapter writes for a session of `role`. */
+  function skillFor(role: Role): string {
+    const opts = launcher({ toolSkills: true, withoutMcp: ["copilot"] }).sessionOptions(
+      { ...session, role },
+      TOKEN,
+    );
+    const plugin = writeCopilotToolPlugin({
+      sessionId: session.id,
+      tools: opts.codeDenTools?.tools ?? [],
+    });
+    try {
+      return readFileSync(join(plugin.dir, "skills", "codeden-tools", "SKILL.md"), "utf8");
+    } finally {
+      plugin.remove();
+    }
+  }
+
+  it("an agent gets the agent tools", () => {
+    const skill = skillFor("agent");
+    for (const tool of ["finish", "report_progress", "create_pull_request", "browser_screenshot"]) {
+      expect(skill, tool).toContain(`\`${tool}\``);
+    }
+    for (const tool of ["start_session", "get_overview"]) {
+      expect(skill, tool).not.toContain(`\`${tool}\``);
+    }
+  });
+
+  it("a PM gets its own tools, not the agent's", () => {
+    const skill = skillFor("pm");
+    for (const tool of [
+      "start_session",
+      "message_orchestrator",
+      "get_project_status",
+      "list_automations",
+      "create_issue",
+      "factory_hold_issue",
+    ]) {
+      expect(skill, tool).toContain(`\`${tool}\``);
+    }
+    for (const tool of ["finish", "create_pull_request", "browser_screenshot", "get_overview"]) {
+      expect(skill, tool).not.toContain(`\`${tool}\``);
+    }
+  });
+
+  it("an orchestrator gets the orchestrator tools, not the PM's or the agent's", () => {
+    const skill = skillFor("orchestrator");
+    for (const tool of ["get_overview", "list_projects", "message_pm", "schedule_wakeup"]) {
+      expect(skill, tool).toContain(`\`${tool}\``);
+    }
+    for (const tool of ["finish", "start_session", "browser_screenshot"]) {
+      expect(skill, tool).not.toContain(`\`${tool}\``);
+    }
   });
 });
