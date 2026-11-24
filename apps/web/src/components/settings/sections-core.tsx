@@ -234,6 +234,38 @@ export function ProviderSettings() {
           />
         </SettingRow>
       </SettingsSection>
+      {providers.some((p) => p.capabilities.toolSkills) && (
+        <SettingsSection
+          title="CodeDen's tools"
+          description="Agents normally use CodeDen's tools over MCP. If your company blocks MCP servers, give a provider's sessions the same tools as a local skill instead: CodeDen writes a small plugin with a bridge script and opens it from the provider's command line, so no MCP server is needed. It applies when a session starts or resumes."
+        >
+          {providers
+            .filter((p) => p.capabilities.toolSkills)
+            .map((p) => {
+              const on = settings.agentTools.withoutMcp.includes(p.id);
+              return (
+                <SettingRow
+                  key={p.id}
+                  label={`${p.displayName}: give CodeDen's tools as a skill`}
+                  help="For company policies that disable MCP. The session token stays in the agent's environment; the tool call goes to CodeDen's local endpoint, not through an MCP server."
+                >
+                  <Switch
+                    checked={on}
+                    onCheckedChange={(v) =>
+                      update({
+                        agentTools: {
+                          withoutMcp: v
+                            ? [...settings.agentTools.withoutMcp, p.id]
+                            : settings.agentTools.withoutMcp.filter((id) => id !== p.id),
+                        },
+                      })
+                    }
+                  />
+                </SettingRow>
+              );
+            })}
+        </SettingsSection>
+      )}
       <ModelVisibilitySettings />
       <CustomModelSettings />
       <ProviderHistorySettings />

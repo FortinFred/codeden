@@ -132,6 +132,18 @@ When a server failed or needs sign-in, the agent can't use its tools, so a notic
 
 The notice goes away once the servers connect. Its close button hides it for those servers in every session of the project, and this browser remembers it across reloads; the notice comes back only when another server gets into trouble, or one of them in another way (a server that needed sign-in now fails). Trouble with CodeDen's own server (`codeden`) is the exception: without it the agent can't ask you questions or report back, so it shows in each session until you dismiss it there. Only server names, states, where they come from and the provider's short error (first line, with anything that looks like a secret masked) are kept; commands, URLs, headers and environment values never are.
 
+### CodeDen's tools when MCP is blocked
+
+CodeDen's own tools (`report_progress`, `ask_user`, `finish`, the browser tools, the GitHub and factory tools) normally reach an agent through CodeDen's MCP server. Some companies disable MCP servers for a provider by policy. For those, **Settings → Providers** has a switch per provider that supports it (today Copilot CLI): *"give CodeDen's tools as a skill"*. A session then gets no MCP server from CodeDen. Instead, CodeDen writes a small local plugin in the operating system's temporary folder, with a `codeden-tools` skill and a bridge script, and opens it from the provider's command line (`--plugin-dir`). The agent loads the skill and runs the script for each tool call:
+
+```sh
+node "<the script the skill names>" finish '{"outcome":"success","summary":"Fixed the parser"}'
+```
+
+The script calls CodeDen's local tool endpoint with a token for that session only. The token is passed in the agent's environment (`CODEDEN_TOOLS_TOKEN`), never written to a file or a command line, and is revoked when the session ends. The plugin folder is removed when the session closes or fails to start.
+
+The switch applies when a session starts or resumes, so an open session keeps the channel it started with. It only concerns CodeDen's tools: MCP servers you configured yourself are left as they are. Two limits: the company policy must still allow local plugin directories, and each tool call is a shell command, so a long `ask_user` can outlast the provider's shell timeout; the question stays in your inbox and the answer arrives as the session's next message. Providers without the capability don't offer the switch.
+
 ### Hooks in What's loaded
 
 For providers whose native config has hooks (today Claude Code), a **Hooks** list shows every hook that applies to the session's folder. Each row has its event and matcher (`all` when the hook has no matcher, so it runs for everything), what it runs and its scope. Hover a row to see its settings file. **Edit hooks** opens the Hooks tab for the session's project. The files that apply are:

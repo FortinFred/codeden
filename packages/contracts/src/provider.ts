@@ -34,6 +34,13 @@ export const ProviderCapabilities = z.object({
   mcp: z.boolean(),
   skills: z.boolean(),
   /**
+   * CodeDen's tools can reach the session as a local plugin skill and a bridge script instead
+   * of an MCP server (`Settings.agentTools.withoutMcp`), for companies whose provider policy
+   * blocks MCP. The session opens the skill's plugin folder from its command line. False or
+   * absent: sessions on this provider always get CodeDen's tools over MCP.
+   */
+  toolSkills: z.boolean().optional(),
+  /**
    * An autonomy change reaches a running turn from its next tool call. When false (or absent),
    * a running turn keeps its autonomy and the change applies from the next turn.
    */
@@ -249,6 +256,18 @@ export const SessionOptions = z.object({
    */
   forkFrom: z.string().min(1).optional(),
   mcpServers: z.array(McpServerConfig).default([]),
+  /**
+   * CodeDen's tool channel for a session whose provider gets its tools from a skill instead of
+   * MCP (`ProviderCapabilities.toolSkills`, `Settings.agentTools.withoutMcp`): the loopback tool
+   * endpoint (the runner's MCP proxy URL) and this session's freshly minted role-scoped token.
+   * A provider hands it to the skill's bridge script, never to the agent as an MCP server.
+   */
+  codeDenTools: z
+    .object({
+      url: z.url(),
+      token: z.string().min(1),
+    })
+    .optional(),
   /** Extra env vars for the agent process (CodeDen secrets are never included). */
   env: z.record(z.string(), z.string()).optional(),
   /**

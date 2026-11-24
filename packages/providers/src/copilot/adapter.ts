@@ -27,6 +27,11 @@ import {
   parseCopilotModelChoices,
 } from "./models";
 import { COPILOT_ACP_ARGS, type CopilotProbe, probeCopilot } from "./probe";
+import {
+  CODEDEN_TOOLS_TOKEN_ENV,
+  CODEDEN_TOOLS_URL_ENV,
+  writeCopilotToolPlugin,
+} from "./tool-plugin";
 
 export const COPILOT_PROVIDER_ID = "copilot";
 
@@ -53,6 +58,8 @@ export const COPILOT_AGENT: AcpAgentSpec = {
  * add input to a running prompt), subagents, rollback, fork and reasoning effort (the CLI takes
  * it at launch, not per session). Images and MCP servers (CodeDen's tools are an HTTP MCP
  * server) follow what the CLI reports in `initialize`; plan mode, what its sessions list.
+ * `toolSkills` is its `--plugin-dir`: when a company policy blocks MCP, CodeDen's tools come
+ * from a generated plugin skill and a bridge script instead (`tool-plugin.ts`).
  */
 const BASE_CAPABILITIES: ProviderCapabilities = {
   resume: true,
@@ -68,6 +75,7 @@ const BASE_CAPABILITIES: ProviderCapabilities = {
   reasoningEffort: false,
   mcp: true,
   skills: false,
+  toolSkills: true,
   liveAutonomy: true,
   readOnly: true,
 };
@@ -211,15 +219,35 @@ export class CopilotAdapter implements ProviderAdapter {
         "setup",
       );
     }
-    const session = new AcpSession(opts, {
-      executable: found.command,
-      spec: COPILOT_AGENT,
-      onSetup: (setup, info) => this.onSetup(setup, info),
-      ...(this.options.startTimeoutMs ? { startTimeoutMs: this.options.startTimeoutMs } : {}),
-      ...(this.options.interruptTimeoutMs
-        ? { interruptTimeoutMs: this.options.interruptTimeoutMs }
-        : {}),
-    });
+    // CodeDen's tools as a skill instead of MCP (company policies that block MCP): a plugin the
+    // CLI opens from its command line, with the session token only in the agent's environment.
+    const tools = opts.codeDenTools
+      ? writeCopilotToolPlugin({ sessionId: opts.sessionId })
+      : undefined;
+    const session = new AcpSession(
+      tools && opts.codeDenTools
+        ? {
+            ...opts,
+            env: {
+              ...opts.env,
+              [CODEDEN_TOOLS_URL_ENV]: opts.codeDenTools.url,
+              [CODEDEN_TOOLS_TOKEN_ENV]: opts.codeDenTools.token,
+            },
+          }
+        : opts,
+      {
+        executable: found.command,
+        spec: COPILOT_AGENT,
+        onSetup: (setup, info) => this.onSetup(setup, info),
+        ...(tools
+          ? { extraArgs: ["--plugin-dir", tools.dir], onClosed: () => tools.remove() }
+          : {}),
+        ...(this.options.startTimeoutMs ? { startTimeoutMs: this.options.startTimeoutMs } : {}),
+        ...(this.options.interruptTimeoutMs
+          ? { interruptTimeoutMs: this.options.interruptTimeoutMs }
+          : {}),
+      },
+    );
     try {
       await session.start();
     } catch (error) {
