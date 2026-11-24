@@ -3,7 +3,7 @@ import type { ApprovalBroker } from "../approvals";
 import { shorten, toJson } from "../util/text";
 import { type AcpToolState, commandOf, mcpOf, pathsOf, workdirOf } from "./items";
 import type { AcpEventMapper } from "./mapper";
-import type { AcpPolicy, AcpPolicyDecision } from "./policy";
+import type { AcpBoundaryAsk, AcpPolicy, AcpPolicyDecision } from "./policy";
 import { WRITE_KINDS } from "./policy";
 import type { AcpPermissionOption, AcpPermissionRequest, AcpPermissionResult } from "./protocol";
 
@@ -17,6 +17,8 @@ export interface AcpApprovalDeps {
   trustedServers: readonly string[];
   /** The agent's own answer to this request (`AcpExtensions.permission`), if it has one. */
   own?: (call: AcpToolState) => Promise<AcpPermissionResult> | undefined;
+  /** The agent's own boundary ask (`AcpExtensions.boundary`), if it has one. */
+  boundary?: (call: AcpToolState) => AcpBoundaryAsk | undefined;
 }
 
 const CANCELLED: AcpPermissionResult = { outcome: { outcome: "cancelled" } };
@@ -37,7 +39,12 @@ export async function answerPermission(
   if (!ctx) return CANCELLED;
   const own = deps.own?.(call);
   if (own) return own;
-  const decision = deps.policy.decide(call);
+  // The agent's own security ask (a path outside the folders it trusts) wins over a policy allow:
+  // CodeDen's classifier has no opinion on it, and granting it silently would widen the session.
+  const decided = deps.policy.decide(call);
+  const boundary =
+    decided.kind === "allow" && !decided.remembered ? deps.boundary?.(call) : undefined;
+  const decision: AcpPolicyDecision = boundary ? { kind: "ask", ...boundary } : decided;
   const item = approvalItem(call, decision, deps, deps.mapper.toolItemId(call.toolCallId));
   const trusted = decision.kind === "allow" && isTrustedCall(call, deps);
   if (decision.kind === "allow") {
@@ -140,6 +147,17 @@ export function approvalItem(
         ...base,
         title:
           paths.length === 1 ? `${verb} ${paths[0]}` : title || `${verb} ${paths.length} files`,
+        ...(paths.length ? { paths } : {}),
+      };
+    }
+    case "read":
+    case "search": {
+      // An agent's read ask (its own path boundary, say): its title says why, and the paths name
+      // the files, so the card shows both.
+      const paths = pathsOf(call, deps.cwd);
+      return {
+        ...base,
+        title: title || `Read ${base.toolName}`,
         ...(paths.length ? { paths } : {}),
       };
     }
