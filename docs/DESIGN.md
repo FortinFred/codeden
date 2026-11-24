@@ -879,6 +879,7 @@ Detailed, trustworthy reports on spend and usage across every provider, project 
   - **API-key users** see actual spend.
   - **Subscription users** (a claude.ai or ChatGPT login) see an **"API-equivalent cost"**, clearly labelled as such, so they know what the same work would cost on API credits.
   - **OpenCode** model ids such as `anthropic/<model>` and `openai/<model>` are priced from the Claude and Codex tables when OpenCode reports no cost.
+  - **Copilot CLI** resells Claude and OpenAI models, so its model ids are priced from the Claude and Codex tables too (its Claude ids use dots, `claude-sonnet-5.5`), as an API-equivalent figure. Auto, Default and the models whose list price isn't in the tables (Gemini, Grok, Kimi, …) keep their tokens and stay unpriced.
 - **Rate limits.** CodeDen records each provider's limit status as it reports it: Claude's 5-hour and weekly windows, and Codex rate-limit snapshots from `app-server`. It shows how much of each window is used and when it resets, and can warn before a limit is reached.
 - **Reports screen:**
   - a time range (today, 7 or 30 days, custom) and a total
