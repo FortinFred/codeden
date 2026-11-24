@@ -224,6 +224,12 @@ describe("creating an OpenSpec change from the app (#33)", () => {
     expect(openSpecChangeId("Add gift cards")).not.toMatch(/[./]/);
   });
 
+  it("prefixes a Windows device name, which cannot be a folder there", () => {
+    expect(openSpecChangeId("CON")).toBe("change-con");
+    expect(openSpecChangeId("lpt9")).toBe("change-lpt9");
+    expect(openSpecChangeId("console")).toBe("console");
+  });
+
   it("refuses an existing folder rather than overwrite it", async () => {
     env = createFactoryEnv();
     await s.enable("software_factory", { tuning: { workSource: "openspec" } });
