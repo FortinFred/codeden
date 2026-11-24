@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -100,6 +101,8 @@ describe("Copilot's CodeDen tool plugin", () => {
     expect(skill).toContain("name: codeden-tools");
     expect(skill).toContain(plugin.script);
     expect(skill).toContain('node "');
+    expect(skill).toContain("<tool> <<'CODEDEN_JSON'");
+    expect(skill).not.toContain("'<json arguments>'");
     for (const tool of [
       "report_progress",
       "finish",
@@ -226,5 +229,77 @@ describe("Copilot's CodeDen tool plugin", () => {
     expect(existsSync(plugin.dir)).toBe(true);
     plugin.remove();
     expect(existsSync(plugin.dir)).toBe(false);
+  });
+});
+
+describe("the command the skill documents", () => {
+  const withSh = process.platform === "win32" ? it.skip : it;
+
+  /** Run a POSIX shell command with the bridge's environment. */
+  function runShell(command: string, url: string) {
+    return new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
+      execFile(
+        "sh",
+        ["-c", command],
+        {
+          env: {
+            ...process.env,
+            [CODEDEN_TOOLS_URL_ENV]: url,
+            [CODEDEN_TOOLS_TOKEN_ENV]: TOKEN,
+          },
+        },
+        (error, stdout, stderr) => {
+          const code = typeof error?.code === "number" ? error.code : error ? 1 : 0;
+          resolve({ code, stdout, stderr });
+        },
+      );
+    });
+  }
+
+  /** The first fenced command in the skill, with the tool and its JSON filled in. */
+  function documentedCommand(pluginDir: string, tool: string, json: string): string {
+    const skill = readFileSync(join(pluginDir, "skills", "codeden-tools", "SKILL.md"), "utf8");
+    const template = /```(?:sh)?\n([\s\S]*?)```/.exec(skill)?.[1];
+    expect(template).toBeTruthy();
+    return (template as string).replace("<tool>", tool).replace("<json arguments>", json).trimEnd();
+  }
+
+  withSh("passes relayed text through to the endpoint unchanged", async () => {
+    const endpoint = await stubEndpoint(sse({ content: [{ type: "text", text: "Asked." }] }));
+    try {
+      const plugin = pluginFor();
+      const question = `What's next? $HOME \`id\`; echo pwned`;
+      const command = documentedCommand(
+        plugin.dir,
+        "ask_user",
+        JSON.stringify({ question, options: [{ label: "Yes" }] }),
+      );
+      const result = await runShell(command, endpoint.url);
+      expect(result.code).toBe(0);
+      expect(endpoint.seen[0]?.body).toMatchObject({
+        params: { name: "ask_user", arguments: { question, options: [{ label: "Yes" }] } },
+      });
+    } finally {
+      await endpoint.close();
+    }
+  });
+
+  withSh("never lets relayed text run as a shell command", async () => {
+    const endpoint = await stubEndpoint(sse({ content: [{ type: "text", text: "Posted." }] }));
+    const marker = join(tmpdir(), `codeden-tool-injection-${process.pid}-${Date.now()}`);
+    try {
+      const plugin = pluginFor();
+      const body = `Looks fine. ' ; touch ${marker} ; ' $"x" \`touch ${marker}\` $(touch ${marker})`;
+      const command = documentedCommand(plugin.dir, "comment_on_issue", JSON.stringify({ body }));
+      const result = await runShell(command, endpoint.url);
+      expect(existsSync(marker)).toBe(false);
+      expect(result.code).toBe(0);
+      expect(endpoint.seen[0]?.body).toMatchObject({
+        params: { name: "comment_on_issue", arguments: { body } },
+      });
+    } finally {
+      rmSync(marker, { force: true });
+      await endpoint.close();
+    }
   });
 });

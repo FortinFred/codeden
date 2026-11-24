@@ -137,8 +137,12 @@ The notice goes away once the servers connect. Its close button hides it for tho
 CodeDen's own tools (`report_progress`, `ask_user`, `finish`, the browser tools, the GitHub and factory tools) normally reach an agent through CodeDen's MCP server. Some companies disable MCP servers for a provider by policy. For those, **Settings → Providers** has a switch per provider that supports it (today Copilot CLI): *"give CodeDen's tools as a skill"*. A session then gets no MCP server from CodeDen. Instead, CodeDen writes a small local plugin in the operating system's temporary folder, with a `codeden-tools` skill and a bridge script, and opens it from the provider's command line (`--plugin-dir`). The agent loads the skill and runs the script for each tool call:
 
 ```sh
-node "<the script the skill names>" finish '{"outcome":"success","summary":"Fixed the parser"}'
+node "<the script the skill names>" finish <<'CODEDEN_JSON'
+{"outcome":"success","summary":"Fixed the parser"}
+CODEDEN_JSON
 ```
+
+The JSON goes in on standard input under a single-quoted heredoc delimiter (`<<'CODEDEN_JSON'`), so the shell performs no expansion. That matters because the arguments often carry text the agent relays — a question, a comment body, an issue or PR title — which can contain apostrophes, `$`, backticks or `;`: in a plain single-quoted shell word one `'` would end the quoting and the rest would run as shell.
 
 The script calls CodeDen's local tool endpoint with a token for that session only. The token is passed in the agent's environment (`CODEDEN_TOOLS_TOKEN`), never written to a file or a command line, and is revoked when the session ends. The plugin folder is removed when the session closes or fails to start.
 
