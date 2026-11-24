@@ -228,8 +228,9 @@ describe("work waiting on a provider", () => {
     const { wip } = await env.factory.status(env.project.id);
     expect(wip).toEqual({
       openPrs: 0,
+      building: 1,
       limit: 1,
-      holding: false,
+      holding: true,
       waitingOnProvider: 1,
       note: expect.stringMatching(
         /^1 PR waits on codex \(at its usage limit until \w{3} \d\d:\d\d\) and doesn't count$/,

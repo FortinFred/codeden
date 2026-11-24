@@ -229,6 +229,12 @@ export function mockFactoryApi(world: MockWorld): FactoryApi {
     const toWork = (w: FixtureWorkItem) => work(w, f.limits);
     // Spec approval is on where a spec waits for it.
     const tuning = FactoryTuning.parse({ specApproval: f.inProgress.some((w) => w.specApproval) });
+    // The work-in-progress limit follows the agent limit (no `maxOpenPrs` set).
+    const openPrs = f.inProgress.filter((w) => w.pr).length;
+    // Builds without a PR take room too; a spec waiting for approval doesn't.
+    const building = f.inProgress.filter(
+      (w) => !w.pr && w.stage === "building" && w.specApproval !== "pending",
+    ).length;
     const s = FactoryStatus.parse({
       ...f,
       experimental: isFactoryMode(f.mode),
@@ -236,11 +242,11 @@ export function mockFactoryApi(world: MockWorld): FactoryApi {
       globalKillSwitch: world.snapshot.settings.factory.killSwitch,
       tuning,
       activeSessions: Math.min(f.inProgress.length, f.limits.maxConcurrentSessions),
-      // The work-in-progress limit follows the agent limit (no `maxOpenPrs` set).
       wip: {
-        openPrs: f.inProgress.filter((w) => w.pr).length,
+        openPrs,
+        building,
         limit: f.limits.maxConcurrentSessions,
-        holding: f.inProgress.filter((w) => w.pr).length >= f.limits.maxConcurrentSessions,
+        holding: openPrs + building >= f.limits.maxConcurrentSessions,
       },
       backlog: f.backlog.map(toWork),
       inProgress: crowd(
