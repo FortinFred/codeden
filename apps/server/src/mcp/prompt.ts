@@ -36,11 +36,15 @@ const USER_DECISIONS =
 function toolsIntro(channel: ToolChannel): string {
   if (channel === "mcp") return `CodeDen tools are on the \`${MCP_SERVER_NAME}\` MCP server:`;
   return [
-    `CodeDen's MCP server is not used in this session (MCP is off for this provider). Every CodeDen tool is run through the \`${TOOL_SKILL_NAME}\` skill, which is loaded for you: load it, then run its bridge script, one tool per command:`,
+    `CodeDen's MCP server is not used in this session (MCP is off for this provider). Every CodeDen tool is run through the \`${TOOL_SKILL_NAME}\` skill, which is loaded for you: load it, then run its bridge script, one tool per command, with one line of compact JSON on standard input between a quoted heredoc delimiter:`,
     "",
     "```",
-    "node <the script path the skill names> <tool> '<json arguments>'",
+    "node <the script path the skill names> <tool> <<'CODEDEN_JSON'",
+    "<json arguments>",
+    "CODEDEN_JSON",
     "```",
+    "",
+    "The single-quoted delimiter makes the shell perform no expansion, so text you relay (a question, a comment body, an issue or PR title) arrives exactly as written and can never run as a command. Do not pass the JSON as a single-quoted shell word instead.",
     "",
     "The tools and their arguments are:",
   ].join("\n");

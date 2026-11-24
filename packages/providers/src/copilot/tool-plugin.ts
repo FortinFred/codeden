@@ -30,12 +30,17 @@ export const TOOL_SKILL_NAME = "codeden-tools";
 export const CODEDEN_TOOLS_URL_ENV = "CODEDEN_TOOLS_URL";
 export const CODEDEN_TOOLS_TOKEN_ENV = "CODEDEN_TOOLS_TOKEN";
 
+/** The heredoc delimiter the skill uses, so the shell never expands the JSON it carries. */
+const JSON_DELIMITER = "CODEDEN_JSON";
+
 /**
  * The skill file: when to use it, the exact command, and every tool this session's role is
  * offered (from the registry the MCP endpoint serves, passed in with `codeDenTools`).
  */
 function skillMarkdown(script: string, tools: readonly CodeDenTool[]): string {
-  const command = `node "${script}" <tool> '<json arguments>'`;
+  const command = `node "${script}" <tool> <<'${JSON_DELIMITER}'
+<json arguments>
+${JSON_DELIMITER}`;
   return `---
 name: ${TOOL_SKILL_NAME}
 description: Run the CodeDen tools this session is offered (progress, questions, sharing, finishing, browser, GitHub, factory, PM and orchestrator tools). Use this skill whenever you need a CodeDen tool. CodeDen's MCP server is not used in this session.
@@ -52,13 +57,19 @@ ${command}
 
 - \`<tool>\` is one of the names below. They are the tools your role is offered; a tool your
   role does not get is not listed here and will be refused.
-- \`'<json arguments>'\` is one shell-quoted JSON object, for example \`'{"text":"Reading the code"}'\`.
-  Use \`'{}'\` for a tool without arguments.
+- \`<json arguments>\` is one line of compact JSON, read from standard input between the
+  \`<<'${JSON_DELIMITER}'\` line and a closing \`${JSON_DELIMITER}\` line, for example
+  \`{"text":"Reading the code"}\`. Use \`{}\` for a tool without arguments.
+- The delimiter is single-quoted, so the shell performs no expansion: text you relay from an
+  issue, a comment, a PR title or an \`ask_user\` question keeps its apostrophes, \`$\`,
+  backticks and \`;\` exactly as written, and none of it can run as a command. Never put the
+  JSON in a single-quoted shell word instead, and never add a line to the heredoc that isn't
+  part of the JSON object.
+- Run one tool per command; don't chain them. \`ask_user\` may take a few minutes: if it
+  returns \`pending\`, do not wait or ask again, finish what you can and end your turn.
 - The bridge prints the tool's result, and saves any images to files it names.
 - Exit code 0 means the tool succeeded. A tool that reported an error exits 1 and prints why;
   a usage or environment problem exits 2.
-- Run one tool per command; don't chain them. \`ask_user\` may take a few minutes: if it
-  returns \`pending\`, do not wait or ask again, finish what you can and end your turn.
 
 ## Tools
 
@@ -80,9 +91,9 @@ import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const [name, raw = "{}"] = process.argv.slice(2);
+const [name, raw] = process.argv.slice(2);
 if (!name) {
-  console.error("usage: node codeden-tool.mjs <tool> '<json arguments>'");
+  console.error("usage: node codeden-tool.mjs <tool> <<'${JSON_DELIMITER}'\\n<json arguments>\\n${JSON_DELIMITER}");
   process.exit(2);
 }
 const url = process.env.${CODEDEN_TOOLS_URL_ENV};
@@ -91,9 +102,22 @@ if (!url || !token) {
   console.error("CodeDen tools are unavailable in this session (the tool endpoint variables are missing).");
   process.exit(2);
 }
+let input;
+if (raw !== undefined) {
+  input = raw;
+} else if (process.stdin.isTTY) {
+  console.error(
+    "No JSON arguments: pass them on standard input, e.g. <<'${JSON_DELIMITER}' ... ${JSON_DELIMITER}",
+  );
+  process.exit(2);
+} else {
+  const chunks = [];
+  for await (const chunk of process.stdin) chunks.push(chunk);
+  input = Buffer.concat(chunks).toString("utf8");
+}
 let args;
 try {
-  args = raw.trim() ? JSON.parse(raw) : {};
+  args = input.trim() ? JSON.parse(input) : {};
 } catch (error) {
   console.error("Invalid JSON arguments: " + (error && error.message ? error.message : String(error)));
   process.exit(2);
