@@ -195,6 +195,9 @@ export function deriveNotices(events: RawEventEnvelope[], lookup: NoticeLookup):
     } else if (e.type === "automation_run.updated") {
       const { run } = e.payload as { run: AutomationRun };
       if (run.status !== "skipped" || !run.projectId) continue;
+      // The factory loop owns issue intake: its own intake notice already tells the PM what it
+      // took on, so a routine factory-intake skip must not wake it. The run row keeps the skip.
+      if (run.skipReason === "factory_intake") continue;
       out.push({
         wake: true,
         notice: {

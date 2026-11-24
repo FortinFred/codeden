@@ -262,4 +262,27 @@ describe("typed notices from events (§8.2 step 4)", () => {
       ["automation.skipped", true],
     ]);
   });
+
+  it("stays quiet on a factory-intake skip, which the factory's own intake already reports", () => {
+    const run = (id: string, skipReason: string) => ({
+      id,
+      automationId: "auto1",
+      projectId: "p1",
+      status: "skipped",
+      skipReason,
+      workKey: "automation:issue-intake",
+      purpose: "Issue intake",
+      sessionId: null,
+    });
+    const out = deriveNotices(
+      [
+        ev("automation_run.updated", null, { run: run("r2", "factory_intake") }),
+        ev("automation_run.updated", null, { run: run("r3", "daily_cap") }),
+      ],
+      lookup,
+    );
+    expect(out.map((d) => [d.notice.id, d.notice.type, d.wake])).toEqual([
+      ["automation.skipped:r3", "automation.skipped", true],
+    ]);
+  });
 });
