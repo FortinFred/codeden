@@ -17,7 +17,7 @@ For a shorter walk-through of what the loop does between events (its states, the
 
 ## How the software factory works
 
-Issues are created outside CodeDen: by you, a teammate, or anything that files GitHub issues. The factory takes them from there:
+By default, issues are created outside CodeDen: by you, a teammate, or anything that files GitHub issues. The factory takes them from there. A project can take its work from OpenSpec change folders instead (see [OpenSpec as the work source](#openspec-as-the-work-source)):
 
 ```
                        ┌─ Bug:      Reproduce ─► Create fix ─► Review fix ─┐
@@ -40,6 +40,17 @@ Issue ─► Identify type ┼─ Feature:  Analyze ───► Implement ─�
 6. **Merge.** With every check green the pull request is **ready for you**: an inbox item, a comment on the PR, and the item waits at Merge until you merge it on GitHub. With **auto-merge** on, CodeDen squash-merges trusted work itself, through [the merge queue](#the-factory-looks-after-its-pull-requests). It watches CI on the default branch afterwards: a regression opens an automatic revert PR, pauses the loop and holds fast merges until the default branch is green again. The revert merges first on its own green CI, with no test results, screenshots or agent review needed when it is an exact revert; then the loop resumes and the reverted work goes back to its builder (see [The revert](factory-loop.md#watching-main-after-a-merge)).
 
 Every pull request carries its **test results** (a `## Test results` section in the description, or the raw output attached with `attach_evidence`) and, when UI files changed, **screenshots**. Both are merge checks.
+
+### OpenSpec as the work source
+
+A project's factory can find its work in **OpenSpec** instead of GitHub issues (the **Work source** setting): every folder under the project's `openspec/changes/` with a `proposal.md` becomes a **feature** item. The folders are local files, so their work is trusted and needs no classification.
+
+- **The proposal is the request.** Its first `# ` heading is the item's title, and the rest of the file is what the builder reads (a YAML frontmatter block is ignored).
+- **The plan travels with the pull request.** The builder keeps the change folder up to date in its worktree: `design.md` (the decisions, alternatives and risks), the spec delta under `specs/<capability>/spec.md`, and `tasks.md` with one task per acceptance criterion, checked off as the work is done. The pull request carries the folder along with the code, and its body names the change instead of `Fixes #N`.
+- **There is no issue.** Nothing is created or commented on GitHub: the item page shows the change and its path, and the analysis, spec approval, review and follow-ups stay on the item.
+- **GitHub still does the delivery.** Pull requests, CI, review, the merge queue, reverts and evidence are unchanged. A local-only project can't use this source, because the factory still needs pull requests and CI.
+- **Only the project's own folder.** A **central OpenSpec store** lives in a repository of its own ([openspec.dev/docs/stores](https://openspec.dev/docs/stores)), so one change would span two repositories and two pull requests; that is not supported yet. The source reads the project's own `openspec/` folder from its main checkout, so a change created on an unmerged branch is taken in once it reaches the default branch.
+- **A removed change is not a failure.** A folder that disappears after its item started doesn't fail the item; one that can't be read is skipped.
 
 ### Lessons: the factory learns from its reviews
 
@@ -460,10 +471,11 @@ Settings are **enforced by the server**, never left to agent judgement. Open the
 | Protected paths | none | Added to the vision's protected areas |
 | Allow deploy and release changes (`allowDeploys`) | off | While off, deploy files (`.github/workflows/*deploy*`, `*release*`, `*publish*`, `Dockerfile`, `fly.toml`, `vercel.json`, `netlify.toml`) are protected |
 
-**Tuning.** **Spot-check share of automatic merges**, **Approve specs before building**, **PRs open at most**, the **Merge checks**, **Agents** and (in a dark factory) **The scout** sections of the settings cover every knob below except `areas` and `idleGraceMin`, which are set through the API's `tuning` field. Saving changes only the knobs you send; the rest keep their saved values.
+**Tuning.** **Work source**, **Spot-check share of automatic merges**, **Approve specs before building**, **PRs open at most**, the **Merge checks**, **Agents** and (in a dark factory) **The scout** sections of the settings cover every knob below except `areas` and `idleGraceMin`, which are set through the API's `tuning` field. Saving changes only the knobs you send; the rest keep their saved values.
 
 | Setting | In the settings | Default |
 |---|---|---|
+| `workSource` | Work source: GitHub issues, or [the project's OpenSpec change folders](#openspec-as-the-work-source) (GitHub projects only) | `github` |
 | `specApproval` | Approve specs before building (software factory only: a feature's spec [waits for you](#approve-specs-before-building) after Analyze) | `false` |
 | `spotCheckPercent` | Spot-check share of automatic merges (%), the share [set aside for a person's look](#spot-checks); empty: the default, `0`: off | `null` (10 in a dark factory, 0 otherwise) |
 | `maxOpenPrs` | PRs open at most (the [work-in-progress limit](#finish-before-starting); empty: the same as Agents at once) | `null` (Agents at once) |

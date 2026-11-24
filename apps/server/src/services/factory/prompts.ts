@@ -80,6 +80,8 @@ function criteriaList(criteria: readonly string[]): string {
 }
 
 function issueLine(item: FactoryItem): string {
+  if (item.openspecChange)
+    return `OpenSpec change \`${item.openspecChange.id}\` (\`${item.openspecChange.path}/proposal.md\`): **${item.title}**`;
   return item.issue
     ? `GitHub issue #${item.issue.number} (${item.issue.url}): **${item.title}**`
     : `**${item.title}**`;
@@ -89,14 +91,35 @@ function issueBlock(item: FactoryItem): string {
   return ["<issue>", item.summary.trim() || item.title, "</issue>"].join("\n");
 }
 
+/** What a builder keeps in an OpenSpec change folder: the plan travels with the pull request. */
+function openspecPlanBlock(item: FactoryItem): string {
+  const change = item.openspecChange;
+  if (!change) return "";
+  return [
+    `<openspec-change id="${change.id}" path="${change.path}">`,
+    `This item tracks the OpenSpec change in \`${change.path}/\`. Keep the plan there, in your worktree, and commit it with your code so the pull request carries it:`,
+    "- `proposal.md` is the request (already there).",
+    "- Analyze writes `design.md` (the decisions, alternatives and risks) and the spec delta in `specs/<capability>/spec.md` (`## ADDED Requirements` / `## MODIFIED Requirements`, each requirement with its scenarios).",
+    "- `tasks.md` is the checklist: one task per acceptance criterion.",
+    "- Implement works through `tasks.md` and checks each task off as it is done.",
+    "- When you open the pull request (after the spec stands), its body names the change; don't add `Fixes #N`. The folder goes with it.",
+    "</openspec-change>",
+  ].join("\n");
+}
+
 /** What every builder does once the change is written. */
-const PR_STEPS = [
-  "- Run the project's tests and linters until they pass.",
-  "- Commit, then open the pull request with `create_pull_request` (it links the issue with `Fixes #N`). Its body must include a `## Test results` section: the commands you ran and what passed.",
-  "- Attach the raw test output with `attach_evidence` (`testOutput`).",
-  "- If you changed anything visible in a UI, start the dev server, take browser screenshots of the change and attach them with `attach_evidence` (`files`).",
-  "- Call `finish` with the outcome, a summary, the tests you ran and the changed files.",
-];
+function prSteps(item: FactoryItem): string[] {
+  const link = item.openspecChange
+    ? ` (name the OpenSpec change \`${item.openspecChange.id}\` in the body: the change folder is what this item tracks, so don't add \`Fixes #N\`)`
+    : " (it links the issue with `Fixes #N`)";
+  return [
+    "- Run the project's tests and linters until they pass.",
+    `- Commit, then open the pull request with \`create_pull_request\`${link}. Its body must include a \`## Test results\` section: the commands you ran and what passed.`,
+    "- Attach the raw test output with `attach_evidence` (`testOutput`).",
+    "- If you changed anything visible in a UI, start the dev server, take browser screenshots of the change and attach them with `attach_evidence` (`files`).",
+    "- Call `finish` with the outcome, a summary, the tests you ran and the changed files.",
+  ];
+}
 
 /**
  * Builders and reviewers are judged when their turn ends, so a turn should end with the step
@@ -130,7 +153,7 @@ export function fixStep(item: FactoryItem): string {
         : ["The reported bug no longer happens", "A regression test covers it"],
     ),
     "",
-    ...PR_STEPS,
+    ...prSteps(item),
     "- In `## Test results`, show the reproduction failing before your fix and passing after it.",
     "An independent reviewer checks the fix next. If it asks for changes, they come back to you.",
   ].join("\n");
@@ -147,7 +170,8 @@ export function implementStep(item: FactoryItem): string {
     criteriaList(item.acceptanceCriteria),
     "",
     "- Add or update tests that prove every criterion, and update the docs the feature changes.",
-    ...PR_STEPS,
+    ...(item.openspecChange ? [openspecPlanBlock(item)] : []),
+    ...prSteps(item),
     "An independent reviewer checks the feature next. If it asks for changes, they come back to you.",
   ]
     .filter((l) => l !== "")
@@ -163,7 +187,7 @@ function docsStep(item: FactoryItem): string {
     "Acceptance criteria:",
     criteriaList(item.acceptanceCriteria),
     "",
-    ...PR_STEPS,
+    ...prSteps(item),
   ].join("\n");
 }
 
@@ -189,6 +213,7 @@ function analyzeStep(item: FactoryItem): string {
       : []),
     "- Check whether it already exists or can already be done; write and run a small probe if that settles it.",
     "- Check that it fits the vision (and its out-of-scope list), the architecture, backward compatibility, and which docs would change.",
+    ...(item.openspecChange ? ["", openspecPlanBlock(item)] : []),
     "- Don't implement anything yet and don't open a pull request.",
     "- Call `factory_submit_analysis`: `implement` with a short spec and testable acceptance criteria; or `already_done`, `needs_info` or `out_of_scope` with the reason.",
     "CodeDen then gives you the next step.",
@@ -305,6 +330,9 @@ export function reviewerPrompt(
     criteriaList(item.acceptanceCriteria),
     item.investigation?.details
       ? ["", "<spec>", item.investigation.details.trim(), "</spec>"].join("\n")
+      : "",
+    item.openspecChange
+      ? `This item tracks the OpenSpec change \`${item.openspecChange.id}\` in \`${item.openspecChange.path}/\`: check that the pull request carries its proposal, design, spec delta and tasks, that the tasks are checked off, and that the code matches the spec delta. That folder, not a GitHub issue, is what this work tracks.`
       : "",
     "",
     visionBlock(vision),

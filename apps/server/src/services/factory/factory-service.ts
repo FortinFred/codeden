@@ -359,6 +359,11 @@ export class FactoryService {
     const entering = isFactoryMode(req.mode);
     const wasFactory = isFactoryMode(project.autonomyMode);
     const limits = req.limits ?? project.factoryLimits;
+    if (req.tuning?.workSource === "openspec" && project.kind !== "github")
+      throw badRequest(
+        "The OpenSpec work source needs a GitHub project: pull requests, CI and merge still run there.",
+        "openspec_needs_github",
+      );
     if (entering)
       assertCanEnter(this.ctx, project, { limitsSent: Boolean(req.limits), wasFactory, limits });
     const next = {

@@ -3,8 +3,9 @@
 What the software factory and the dark factory do between the events you see: when work starts, how pull requests merge, what "Loop building" means, and what still comes to you. Every number here is the default; most can be changed in the factory **Settings**. For the full reference (every setting, merge check and API route) see [The software factory and the dark factory](software-factory.md).
 
 ```text
- Issue: yours, a trusted author's
- or (dark factory) the scout's
+ Issue: yours, a trusted author's,
+ an OpenSpec change, or (dark factory)
+ the scout's
    │
    ▼
  Identify type
@@ -70,6 +71,7 @@ While paused, work already in flight keeps moving (builds and reviews finish), b
 
 ### Intake and classification
 
+- **Where work comes from.** GitHub issues by default. With the **Work source** set to OpenSpec, the factory takes the project's `openspec/changes/` folders instead: each folder with a `proposal.md` is a **feature** item, already trusted, with its title from the proposal's first heading. No issue is created or commented on; the change folder is what the item tracks, and it travels in the pull request. Pull requests, CI, review and merge still run on GitHub, so this needs a GitHub project ([OpenSpec as the work source](software-factory.md#openspec-as-the-work-source)).
 - **What's taken on.** An issue opened on GitHub after you switched the factory on, or one labelled `codeden-factory`. Only issues by **trusted authors** are taken on: the GitHub account CodeDen uses, and the logins under **Trusted authors**. Everyone else's are listed as ignored, untouched, until you click **Let in**.
 - **Identify type.** A GitHub label decides it (`bug`, `enhancement` or `feature`, `documentation` or `docs`). Otherwise one quick call to the utility model sorts it, and with no model available, keywords do. The issue gets a `factory:bug`, `factory:feature` or `factory:docs` label and a comment with its pipeline.
 - **Waiting for an agent.** The item is queued until an agent is free.
@@ -79,7 +81,7 @@ While paused, work already in flight keeps moving (builds and reviews finish), b
 Each item gets its own agent session in its own worktree.
 
 - **Bug.** The agent writes a failing test (or a probe) that shows the bug. If it can't, the work stops and the issue asks for what's missing. Otherwise the same agent makes the test pass and keeps it as a regression test.
-- **Feature.** The agent checks whether it already works and fits the vision, then posts a spec with acceptance criteria on the issue. A request that already works, is unclear or is out of scope stops with a comment. Otherwise the same agent builds it to the spec.
+- **Feature.** The agent checks whether it already works and fits the vision, then posts a spec with acceptance criteria on the issue. A request that already works, is unclear or is out of scope stops with a comment. Otherwise the same agent builds it to the spec. For an **OpenSpec change**, the spec is the change's own files: Analyze writes `design.md` and the spec delta under `specs/`, and Implement works through `tasks.md`; the pull request carries the folder.
 - **Docs.** The agent makes the change straight away.
 
 Every pull request carries its test results, and screenshots when UI files changed.

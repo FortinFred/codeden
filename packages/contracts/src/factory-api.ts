@@ -46,9 +46,31 @@ export function isFactoryMode(mode: AutonomyMode): boolean {
   return (FACTORY_MODES as readonly string[]).includes(mode);
 }
 
-/** Where a work item came from: an issue, the scout, a failed check on main, a revert. */
-export const FactoryItemSource = z.enum(["discovery", "issue", "failed_check", "revert"]);
+/** Where a work item came from: an issue, an OpenSpec change, the scout, a failed check, a revert. */
+export const FactoryItemSource = z.enum([
+  "discovery",
+  "issue",
+  "openspec",
+  "failed_check",
+  "revert",
+]);
 export type FactoryItemSource = z.infer<typeof FactoryItemSource>;
+
+/** Where the factory finds work (§10.1). */
+export const FactoryWorkSource = z.enum(["github", "openspec"]);
+export type FactoryWorkSource = z.infer<typeof FactoryWorkSource>;
+
+/**
+ * An OpenSpec change a work item tracks (`openspec/changes/<id>/`): the proposal, design, spec
+ * deltas and tasks stay in that folder, in the item's branch and pull request.
+ */
+export const OpenSpecChangeRef = z.object({
+  /** The change's folder name, e.g. `add-login`. */
+  id: z.string().trim().min(1).max(200),
+  /** Its folder, relative to the project root, e.g. `openspec/changes/add-login`. */
+  path: z.string().trim().min(1).max(500),
+});
+export type OpenSpecChangeRef = z.infer<typeof OpenSpecChangeRef>;
 
 /**
  * Where a work item is in its life (the pipeline step is derived from it, see `pipelineStep`):
@@ -229,6 +251,8 @@ export const FactoryItem = z.object({
    */
   specApproval: SpecApproval.nullable().default(null),
   issue: GitHubIssueRef.nullable(),
+  /** The OpenSpec change it tracks, when it came from a change folder rather than an issue. */
+  openspecChange: OpenSpecChangeRef.nullable().default(null),
   pr: GitHubPrRef.nullable(),
   builderSessionId: Id.nullable(),
   builderProvider: ProviderId.nullable(),
@@ -451,6 +475,13 @@ export const FactoryTuning = z.object({
    * spot-checks off. Nothing ever waits on a spot-check.
    */
   spotCheckPercent: SpotCheckPercent.nullable().default(null),
+  /**
+   * Where the factory finds work (see `FactoryWorkSource`). `github` (the default): issues from
+   * trusted authors. `openspec`: the change folders under the project's `openspec/changes/`, each
+   * with its proposal, design, spec deltas and tasks. Pull requests, CI, review and merge still run
+   * on GitHub, so an OpenSpec work source needs a GitHub project.
+   */
+  workSource: FactoryWorkSource.default("github"),
 });
 export type FactoryTuning = z.infer<typeof FactoryTuning>;
 
@@ -767,6 +798,8 @@ export const FactoryWorkItem = z.object({
   title: z.string(),
   workKey: z.string(),
   issue: GitHubIssueRef.nullable(),
+  /** The OpenSpec change it tracks, when its work came from a change folder. */
+  openspecChange: OpenSpecChangeRef.nullable().default(null),
   pr: GitHubPrRef.nullable(),
   score: z.number().nullable(),
   /** The builder session. */
