@@ -129,7 +129,7 @@ export function intakeOpenSpec(
   loop: FactoryLoop,
 ): FactoryLoop {
   const known = new Set(ctx.store.items(project.id).map((i) => i.workKey));
-  for (const change of readOpenSpecChanges(project)) {
+  for (const change of readOpenSpecChanges(project, ctx.log)) {
     const workKey = `openspec:${change.ref.id}`;
     if (known.has(workKey)) continue;
     ctx.store.createItem({

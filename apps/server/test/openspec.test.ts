@@ -1,9 +1,34 @@
-import type { FactoryItem } from "@codeden/contracts";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { FactoryItem, Project } from "@codeden/contracts";
 import { describe, expect, it } from "vitest";
-import { parseProposal } from "../src/services/factory/openspec";
+import { parseProposal, readOpenSpecChanges } from "../src/services/factory/openspec";
 import { builderPrompt } from "../src/services/factory/prompts";
 
 /** Reading an OpenSpec change's proposal for the factory (§10.1). */
+
+describe("OpenSpec change root", () => {
+  it("reads a real changes folder, and reports a symlinked one instead of following it", () => {
+    const dir = mkdtempSync(join(tmpdir(), "codeden-openspec-"));
+    const project = { path: join(dir, "project") } as Project;
+    const inside = join(project.path, "openspec", "changes", "add-login");
+    mkdirSync(inside, { recursive: true });
+    writeFileSync(join(inside, "proposal.md"), "# Add login\n\nInside the project.\n");
+    expect(readOpenSpecChanges(project).map((change) => change.ref.id)).toEqual(["add-login"]);
+
+    const outside = join(dir, "outside");
+    mkdirSync(join(outside, "add-other"), { recursive: true });
+    writeFileSync(join(outside, "add-other", "proposal.md"), "# Add other\n\nOutside.\n");
+    rmSync(join(project.path, "openspec", "changes"), { recursive: true });
+    symlinkSync(outside, join(project.path, "openspec", "changes"), "dir");
+
+    const log: string[] = [];
+    expect(readOpenSpecChanges(project, (message) => log.push(message))).toEqual([]);
+    expect(log.join("\n")).toMatch(/openspec\/changes` is a symbolic link/);
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
 
 describe("OpenSpec proposals", () => {
   it("takes the first heading as the title, after any frontmatter", () => {
