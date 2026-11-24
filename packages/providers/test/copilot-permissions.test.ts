@@ -66,6 +66,59 @@ const titledAsk = (id: string, kind: string, rawInput: unknown): Step => ({
   },
 });
 
+/** An ask of another kind with a title naming a URL: judged as its kind, never as a fetch. */
+const urlTitledAsk = (id: string, kind: string, title: string, rawInput: unknown): Step => ({
+  request: "session/request_permission",
+  params: {
+    toolCall: { toolCallId: id, title, kind, status: "pending", rawInput },
+    options: COPILOT_OPTIONS,
+  },
+});
+
+/** The `tool_call` Copilot reports before it asks about a search outside its folders. */
+const searchCall = (id: string, path: string): Step => ({
+  update: {
+    sessionUpdate: "tool_call",
+    toolCallId: id,
+    title: `Searching for "secret" in ${path}`,
+    kind: "search",
+    status: "pending",
+    rawInput: { pattern: "secret", path },
+    locations: [{ path }],
+  },
+});
+
+/** Copilot's own ask for a search outside the folders it trusts. */
+const searchAsk = (id: string, path: string): Step => ({
+  request: "session/request_permission",
+  params: {
+    toolCall: {
+      toolCallId: id,
+      title: OUTSIDE,
+      kind: "search",
+      status: "pending",
+      rawInput: { pattern: "secret", path },
+      locations: [{ path }],
+    },
+    options: COPILOT_OPTIONS,
+  },
+});
+
+/** Copilot's own ask before it fetches a URL. */
+const fetchAsk = (id: string, url: string): Step => ({
+  request: "session/request_permission",
+  params: {
+    toolCall: {
+      toolCallId: id,
+      title: `Fetching ${url}`,
+      kind: "fetch",
+      status: "pending",
+      rawInput: { url },
+    },
+    options: COPILOT_OPTIONS,
+  },
+});
+
 const done: Step = { stopReason: "end_turn" };
 
 let dir: string;
@@ -240,5 +293,93 @@ describe("Copilot CLI's own path ask over ACP", () => {
       "allow_once",
       "allow_once",
     ]);
+  });
+});
+
+describe("Copilot CLI's own search and URL asks over ACP", () => {
+  it("asks the user instead of granting a search outside the folders it trusts", async () => {
+    const outside = join(homedir(), "codeden-outside-the-worktree");
+    const { reader } = await open([searchCall("s1", outside), searchAsk("s1", outside), done]);
+    const events = await reader.turn("Search outside");
+
+    const [ask] = approvals(reader);
+    expect(ask).toMatchObject({
+      kind: "approval_request",
+      action: "outside_worktree",
+      title: OUTSIDE,
+    });
+    expect(ask?.reason).toContain(outside);
+    expect(answers()).toEqual(["allow_once"]);
+    expect(validateEventStream(events)).toEqual([]);
+    expect(events.at(-1)).toMatchObject({ type: "turn.completed", stopReason: "end_turn" });
+  });
+
+  it("leaves a search inside the worktree, the extra folders and temp alone", async () => {
+    const extra = mkdtempSync(join(tmpdir(), "codeden-copilot-extra-"));
+    const otherTemp = mkdtempSync(join(tmpdir(), "codeden-copilot-temp-"));
+    const { reader } = await open(
+      [
+        searchAsk("in-worktree", join(dir, "src")),
+        searchAsk("in-extra", extra),
+        searchAsk("in-temp", otherTemp),
+        done,
+      ],
+      { additionalDirectories: [extra] },
+    );
+    await reader.turn("Search inside");
+
+    expect(approvals(reader)).toEqual([]);
+    expect(answers()).toEqual(["allow_once", "allow_once", "allow_once"]);
+  });
+
+  it("asks the user before a fetch, naming the URL, and remembers the host for the session", async () => {
+    const url = "https://example.com/notes/a.md";
+    const sameHost = "https://example.com/notes/b.md";
+    const otherHost = "https://elsewhere.test/data.json";
+    const { reader } = await open([
+      fetchAsk("f1", url),
+      fetchAsk("f2", sameHost),
+      fetchAsk("f3", otherHost),
+      done,
+    ]);
+    reader.answer = () =>
+      reader.asked.length === 1
+        ? { kind: "approval", decision: "allow_session" }
+        : { kind: "approval", decision: "deny" };
+    await reader.turn("Fetch things");
+
+    // The first URL asks and is remembered by host; the second URL on that host is not shown
+    // again, while another host still asks, and the deny reaches Copilot as a rejection.
+    expect(approvals(reader).map((a) => a.action)).toEqual(["network", "network"]);
+    expect(approvals(reader).map((a) => a.title)).toEqual([`Fetch ${url}`, `Fetch ${otherHost}`]);
+    expect(approvals(reader).map((a) => a.reason)).toEqual([
+      expect.stringContaining(url),
+      expect.stringContaining(otherHost),
+    ]);
+    // The remembered URL is still answered (Copilot asked, and CodeDen allows it), with no card.
+    expect(answers()).toEqual(["allow_once", "allow_once", "reject_once"]);
+  });
+
+  it("surfaces a URL ask at every level", async () => {
+    const url = "https://example.com/notes/a.md";
+    for (const autonomy of ["supervised", "full", "read_only"] as const) {
+      const { reader } = await open([fetchAsk(`f-${autonomy}`, url), done], { autonomy });
+      await reader.turn("Fetch it");
+      expect(approvals(reader).map((a) => a.action)).toEqual(["network"]);
+    }
+  });
+
+  it("judges a command titled like a URL ask as the command it is", async () => {
+    const url = "https://example.com/notes/a.md";
+    const { reader } = await open(
+      [
+        urlTitledAsk("command", "execute", `Fetching ${url}`, { command: `curl ${url}`, url }),
+        done,
+      ],
+      { autonomy: "full" },
+    );
+    await reader.turn("Run it");
+
+    expect(approvals(reader)).toEqual([]);
   });
 });

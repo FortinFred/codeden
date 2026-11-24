@@ -1,6 +1,6 @@
 import type { ItemOf } from "@codeden/contracts";
 import type { ApprovalBroker } from "../approvals";
-import { shorten, toJson } from "../util/text";
+import { shorten, str, toJson } from "../util/text";
 import { type AcpToolState, commandOf, mcpOf, pathsOf, workdirOf } from "./items";
 import type { AcpEventMapper } from "./mapper";
 import type { AcpBoundaryAsk, AcpPolicy, AcpPolicyDecision } from "./policy";
@@ -160,6 +160,11 @@ export function approvalItem(
         title: title || `Read ${base.toolName}`,
         ...(paths.length ? { paths } : {}),
       };
+    }
+    case "fetch": {
+      // A URL ask: the card names the URL, so it says what the agent would reach.
+      const url = str(call.rawInput, "url");
+      return { ...base, title: url ? `Fetch ${shorten(url, 100)}` : title || "Use the web" };
     }
     default: {
       const mcp = mcpOf(call, deps.mcpServers);
