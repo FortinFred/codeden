@@ -10,9 +10,14 @@ import { factorySteps } from "./support/factory-steps";
  */
 
 let env: FactoryEnv;
-const { item, tick, enable, backlogItem, verifying, failed, keepConflicting } = factorySteps(
-  () => env,
-);
+const { item, tick, enable, backlogItem, verifying, review, failed, keepConflicting, prEntry } =
+  factorySteps(() => env);
+
+/** Hold merges (the loop is paused) while work in flight keeps moving. */
+function pause() {
+  const loop = env.factory.data.loopOrNew(env.project.id);
+  env.factory.data.saveLoop({ ...loop, state: "paused", pausedReason: "held by the test" });
+}
 
 beforeEach(() => {
   env = createFactoryEnv();
@@ -147,5 +152,81 @@ describe("dismissing a failed item (#265)", () => {
     expect(() => env.factory.dismiss(env.project.id, id, { reason: "again" }, "user")).toThrow(
       /Only failed items/,
     );
+  });
+});
+
+/**
+ * Issue #55: a draft pull request is not ready to merge. Nothing on the ready path looked at
+ * `pr.state`, so verification announced "Ready to merge", commented on the PR and (with
+ * auto-merge on) queued it, while GitHub will not merge a draft. It has to wait on the draft,
+ * and take the normal path once a person marks it ready.
+ */
+describe("a draft pull request waits on the draft (#55)", () => {
+  it("is not announced ready, and is once a person marks it ready", async () => {
+    await enable("software_factory", { autoMerge: false });
+    const { id, pr } = await verifying("success", "Draft counter", 5);
+    review(id);
+    pr.ref = { ...pr.ref, state: "draft" };
+
+    await tick();
+
+    expect(item(id).stage).toBe("verifying");
+    expect(env.inbox.find(`inbox:factory-ready:${id}`)).toBeUndefined();
+    expect((await prEntry(pr.ref.number))?.state).not.toBe("waiting_for_you");
+    expect(waiting()).not.toContain(id);
+
+    // Marked ready on GitHub: the normal path takes it.
+    pr.ref = { ...pr.ref, state: "open" };
+    await tick();
+    expect(env.inbox.find(`inbox:factory-ready:${id}`)?.status).toBe("open");
+    expect(waiting()).toContain(id);
+  });
+
+  it("does not join the merge queue, nor merge", async () => {
+    await enable();
+    const { id, pr } = await verifying("success", "Draft queue", 6);
+    review(id);
+    pr.ref = { ...pr.ref, state: "draft" };
+    pause();
+
+    await tick();
+
+    expect(await prEntry(pr.ref.number)).not.toMatchObject({ queuePosition: 1 });
+    expect(await prEntry(pr.ref.number)).not.toMatchObject({ state: "queued" });
+    expect(env.gh.merges).toEqual([]);
+
+    // Marked ready: it joins the queue and merges on the resumed loop.
+    pr.ref = { ...pr.ref, state: "open" };
+    env.factory.resume(env.project.id);
+    await tick();
+    expect(env.gh.merges.map((m) => m.number)).toContain(pr.ref.number);
+  });
+});
+
+/**
+ * Issue #55: the digest promises the Factory view's "Needs you" definition, but `needsYouItems`
+ * never passed the live flags (`prWaitsForYou`, `agentWaiting`), so a ready-to-merge PR or an
+ * agent waiting on a question never reached "Waiting on you".
+ */
+describe("live work that waits on a person reaches the digest (#55)", () => {
+  it("lists a pull request that passed every check and waits for a person to merge it", async () => {
+    await enable("software_factory", { autoMerge: false });
+    const { id } = await verifying("success", "Ready counter", 7);
+    review(id);
+    await tick();
+
+    expect(env.inbox.find(`inbox:factory-ready:${id}`)?.status).toBe("open");
+    expect(waiting()).toContain(id);
+  });
+
+  it("lists an agent that waits on an answer", async () => {
+    await enable();
+    const created = backlogItem("Ask about counters", 9);
+    await tick();
+    expect(item(created.id).stage).toBe("building");
+
+    await env.setStatus(item(created.id).builderSessionId as string, "waiting");
+
+    expect(waiting()).toContain(created.id);
   });
 });

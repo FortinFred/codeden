@@ -47,6 +47,13 @@ describe("what factory work needs from a person (#265)", () => {
     );
     // A failure without a PR from before the last day.
     expect(factoryNeed(item({ finishedAt: ago(FACTORY_FAILED_SHOWN_MS + 1) }), at)).toBeNull();
+    // Over the size limit: the PM splits or allows it, so it isn't a person's to Retry (#55).
+    expect(
+      factoryNeed(item({ reason: "size: 6,000 lines in 2 files" }), {
+        ...at,
+        ownsOpenPr: true,
+      }),
+    ).toBeNull();
     for (const stage of ["merged", "rejected", "reverted", "ignored", "building"] as const)
       expect(factoryNeed(item({ stage }), at)).toBeNull();
   });

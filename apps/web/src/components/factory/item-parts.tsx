@@ -1,6 +1,7 @@
 import {
   type FactoryItem,
   type FactoryItemCost,
+  isSizeFailure,
   type MergeCheck,
   type Session,
   stoppedRetry,
@@ -214,6 +215,14 @@ export function ItemActions({ item, projectId }: { item: FactoryItem; projectId:
           </p>
         )}
       </div>
+    );
+  }
+  // Over the size limit: no Retry (nothing asked for a re-review); the PM splits or allows it.
+  if (item.stage === "failed" && isSizeFailure(item.reason)) {
+    return (
+      <p className="text-2xs text-muted-foreground">
+        Waiting on the PM to split the work or allow it as one change.
+      </p>
     );
   }
   if (!notStarted) return null;

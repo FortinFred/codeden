@@ -25,6 +25,21 @@ function ciState(item: FactoryItem): FactoryPrState {
     : "checking";
 }
 
+/**
+ * The one rule for a pull request that waits on a person to merge it: every check passed, the
+ * factory may not merge it by itself (auto-merge off, or work it doesn't trust), and the PR is
+ * open. A draft is not open for merging: GitHub won't merge it, so it waits for a person to mark
+ * it ready, and its normal path starts then.
+ */
+export function prWaitsForYou(
+  item: Pick<FactoryItem, "checks" | "pr" | "trust">,
+  project: Pick<Project, "factoryLimits">,
+): boolean {
+  return (
+    checksPassed(item) && !mayAutoMerge(item, project.factoryLimits) && item.pr?.state === "open"
+  );
+}
+
 /** The state of an item's PR, given its place in the merge queue (null: not queued). */
 export function prState(item: FactoryItem, project: Project, queued: boolean): FactoryPrState {
   switch (item.stage) {
@@ -34,8 +49,7 @@ export function prState(item: FactoryItem, project: Project, queued: boolean): F
         if (isUpdating(item)) return "updating";
         return checksPassed(item) ? "queued" : ciState(item);
       }
-      if (checksPassed(item) && !mayAutoMerge(item, project.factoryLimits))
-        return "waiting_for_you";
+      if (prWaitsForYou(item, project)) return "waiting_for_you";
       return ciState(item);
     case "backlog":
       return "rebuilding";

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { type GitHubPrRef, Id } from "./common";
 import type { FactoryItemStage } from "./factory-api";
-import type { FactoryFailureKind } from "./factory-prs";
+import { type FactoryFailureKind, isSizeFailure } from "./factory-prs";
 
 /**
  * Running stopped factory work again (§10.1, Stopped work with an open PR): the Retry request,
@@ -60,22 +60,16 @@ export interface StoppedRetry {
   label: string | null;
 }
 
-/** A failure on the size limit: the PM splits it or allows it, so no re-review is asked for. */
-const SIZE_FAILURE = /(^|; )size: /;
-
 /**
  * Whether a factory item can be retried, and how: stopped work (failed or rejected) can; anything
- * else (null) can't.
+ * else (null) can't. A size failure can't either: it waits on the PM to split or allow it.
  */
 export function stoppedRetry(item: StoppedItem): StoppedRetry | null {
   if (item.stage !== "failed" && item.stage !== "rejected") return null;
+  if (isSizeFailure(item.reason)) return null;
   const open = item.pr?.state === "open" || item.pr?.state === "draft";
   const pr = open ? item.pr : null;
-  const needsReview =
-    pr !== null &&
-    item.stage === "failed" &&
-    item.failureKind !== "stuck" &&
-    !SIZE_FAILURE.test(item.reason ?? "");
+  const needsReview = pr !== null && item.stage === "failed" && item.failureKind !== "stuck";
   const n = item.attempts;
   return {
     mode: pr ? "rereview" : "rebuild",

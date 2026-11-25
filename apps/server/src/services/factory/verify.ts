@@ -44,6 +44,9 @@ const evidenceCache = new Map<string, PrEvidence>();
 /** How often a PR that is ready for a person is read from GitHub again (new commits, CI). */
 export const READY_RECHECK_MS = 5 * 60_000;
 
+/** Why a PR whose checks passed waits: GitHub won't merge a draft. */
+export const DRAFT_NOTE = "Draft pull request: mark it ready on GitHub to merge it";
+
 /**
  * One verification step for an item with a PR (§10.1, Review and Merge): gather the inputs,
  * record the merge checks, start or nudge the independent reviewer, then queue it to merge
@@ -63,8 +66,13 @@ export async function advanceVerifying(
   // (`stops.ts`). A PR merged or closed meanwhile is settled below as usual.
   if (stoppedOnPurpose(ctx, item) && !decidedPr(ctx, item)) return endStopped(ctx, loop, item);
   // Ready and waiting for a person: the synced PR says when they merge or close it; GitHub
-  // itself is asked again only every few minutes (new commits, CI, conflicts).
-  if (item.nudges.ready && !mayAutoMerge(item, project.factoryLimits)) {
+  // itself is asked again only every few minutes (new commits, CI, conflicts). A draft is not
+  // ready even if it was announced before: it is read again and waits on being marked ready.
+  if (
+    item.nudges.ready &&
+    !mayAutoMerge(item, project.factoryLimits) &&
+    item.pr?.state !== "draft"
+  ) {
     const ref = ctx.github.prRef(project.id, item.pr.number);
     if (ref && (ref.state === "merged" || ref.state === "closed")) {
       prDecidedOutside(ctx, item, ref);
@@ -196,6 +204,15 @@ export async function advanceVerifying(
   }
 
   // Every check passed: the merge queue merges it in its turn, or a person does.
+  // A draft cannot be merged by GitHub: it waits on the person who marks it ready, and takes
+  // the normal path (the queue, or a person merges it) once it is open.
+  if (current.pr?.state === "draft") {
+    current = leaveQueue(ctx, current);
+    if (!current.note?.startsWith(DRAFT_NOTE)) {
+      current = ctx.store.updateItem(current.id, (i) => ({ ...i, note: DRAFT_NOTE }));
+    }
+    return loop;
+  }
   if (!mayAutoMerge(current, project.factoryLimits) || !isFactoryMode(project.autonomyMode)) {
     current = leaveQueue(ctx, current);
     await readyForYou(ctx, project, current);
