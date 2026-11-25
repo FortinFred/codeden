@@ -30,16 +30,18 @@ export function NeedActions({
   const queryClient = useQueryClient();
   const need = card.need;
   const name = cardNumber(card.item);
-  const refresh = () => void queryClient.invalidateQueries({ queryKey: factoryKeys.all });
+  const refresh = () => queryClient.invalidateQueries({ queryKey: factoryKeys.all });
   // Stuck work can only move on by starting over: rebuilding avoids a re-review of a pull
   // request whose checks can never pass (#61).
   const stuck = stoppedKind(card.item, card.pr) === "stuck";
   const retry = useRetryItem(projectId, card.item.id, stuck ? "rebuild" : undefined);
   const dismiss = useMutation({
     mutationFn: () => client.factory.dismiss(projectId, card.item.id),
-    onSuccess: () => {
+    // Await the refetch: until the fresh status arrives the stale card still draws these
+    // buttons, and a second click would answer `not_failed` / `pr_open` (#69).
+    onSuccess: async () => {
       toast.success(`${name} dismissed`);
-      refresh();
+      await refresh();
     },
     onError: (e) => toast.error("Couldn't dismiss", { description: e.message }),
   });

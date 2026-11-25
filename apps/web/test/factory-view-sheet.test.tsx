@@ -1,5 +1,5 @@
 import { FactoryItem, type FactoryStatus, type FactoryWorkItem } from "@codeden/contracts";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createMockClient } from "@/lib/api/mock";
 import { FactoryViewPage } from "@/routes/factory-view";
@@ -160,5 +160,47 @@ describe("the Factory view's side sheet when its item moves (#62)", () => {
     // It moved to Reviewing; the sheet follows it and drops the stale actions.
     await waitFor(() => expect(within(sheet).queryByText(/Retry or dismiss/)).toBeNull());
     expect(screen.getByTestId("factory-view-sheet")).toBe(sheet);
+  });
+
+  it("keeps its actions disabled until the status refetch after Dismiss lands (#69)", async () => {
+    vi.spyOn(window, "matchMedia").mockImplementation(
+      (query) =>
+        ({
+          matches: true,
+          media: query,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+        }) as unknown as MediaQueryList,
+    );
+    const client = createMockClient();
+    let calls = 0;
+    let refetchStarted = () => {};
+    const started = new Promise<void>((resolve) => {
+      refetchStarted = resolve;
+    });
+    vi.spyOn(client.factory, "status").mockImplementation(async () => {
+      calls += 1;
+      if (calls === 1) return factoryStatus([stopped()]);
+      // The post-dismiss refetch stays in flight: the old card is still drawn meanwhile.
+      refetchStarted();
+      await new Promise<void>(() => {});
+      return factoryStatus([]);
+    });
+    vi.spyOn(client.factory, "item").mockImplementation(async () => ({ item: item(), cost: null }));
+    vi.spyOn(client.factory, "dismiss").mockImplementation(async () => item());
+    renderWithClient(<FactoryViewPage projectId="p-storefront" />, client, { withRouter: true });
+    const sheet = await openStoppedSheet();
+    const dismiss = within(sheet).getByRole("button", { name: "Dismiss #170" });
+    const retry = within(sheet).getByRole("button", { name: "Retry #170" });
+
+    fireEvent.click(dismiss);
+    await started;
+    // Dismiss succeeded, so a second click now would answer `not_failed`; until the fresh
+    // status arrives the stale card must not offer either action again.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(dismiss.hasAttribute("disabled")).toBe(true);
+    expect(retry.hasAttribute("disabled")).toBe(true);
   });
 });

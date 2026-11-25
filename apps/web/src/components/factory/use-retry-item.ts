@@ -15,14 +15,17 @@ export function useRetryItem(projectId: string, itemId: string, mode?: FactoryRe
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => client.factory.retry(projectId, itemId, mode ? { mode } : {}),
-    onSuccess: (next) => {
+    // Await the refetch: until the fresh status and item land, a button that is no longer the
+    // right action (a dismissed item, or one already back in review) would still be clickable
+    // and answer `not_failed` / `pr_open` (#69).
+    onSuccess: async (next) => {
       toast.success(next.stage === "verifying" ? "Back in review" : "Queued again", {
         description:
           next.stage === "verifying" && next.pr
             ? `#${next.pr.number} gets a fresh review; no new build.`
             : "It starts over from the first step.",
       });
-      void queryClient.invalidateQueries({ queryKey: factoryKeys.all });
+      await queryClient.invalidateQueries({ queryKey: factoryKeys.all });
     },
     onError: (e: Error) => toast.error("Couldn't retry", { description: e.message }),
   });

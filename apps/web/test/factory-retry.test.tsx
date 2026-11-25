@@ -60,4 +60,29 @@ describe("Retry on the factory panel (#259)", () => {
     const button = await screen.findByTestId("factory-retry");
     expect(button.getAttribute("title")).toMatch(/from the first step/);
   });
+
+  it("rebuilds stuck work rather than re-reviewing a PR that can never pass (#69)", async () => {
+    const client = createMockClient();
+    const retry = vi.fn(async () => ({}) as never);
+    client.factory.retry = retry;
+    // It used its rebuild and CI can never pass, so Retry would only re-review #172 forever.
+    const stuck = work({
+      pr,
+      ownedPr: pr,
+      failureKind: "stuck",
+      reason: "CI can never run: GitHub Actions is off",
+    });
+    renderWithClient(<RecentColumn projectId="p-app" recent={[stuck]} />, client, {
+      withRouter: true,
+    });
+    const button = await screen.findByTestId("factory-rebuild");
+    expect(screen.queryByTestId("factory-retry")).toBeNull();
+    // The panel says why in the shared words, not the raw reason.
+    expect(screen.getByText("Fix the login timeout").getAttribute("title")).toBe(
+      "CI can't run on this repository",
+    );
+    expect(button.getAttribute("title")).toMatch(/#172/);
+    fireEvent.click(button);
+    await waitFor(() => expect(retry).toHaveBeenCalledWith("p-app", "item-1", { mode: "rebuild" }));
+  });
 });
