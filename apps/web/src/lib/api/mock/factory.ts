@@ -12,6 +12,7 @@ import {
   type Investigation,
   isFactoryMode,
   lessonKey,
+  openSpecChangeId,
   parseVision,
   type ReviewVerdict,
   type SpecApproval,
@@ -40,20 +41,6 @@ const delay = <T>(value: T, ms = 120): Promise<T> =>
   new Promise((resolve) => setTimeout(() => resolve(structuredClone(value)), ms));
 
 const now = () => new Date().toISOString();
-
-/** The folder id the server would derive from a title (mock: no file is written). */
-const openSpecChangeId = (title: string) => {
-  const id =
-    title
-      .normalize("NFKD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 100)
-      .replace(/-+$/, "") || "change";
-  return /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/.test(id) ? `change-${id}` : id;
-};
 
 const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
 

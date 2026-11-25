@@ -23,7 +23,9 @@ import {
   KillSwitchResponse,
   Notice,
   OPENSPEC_CHANGE_BODY_MAX,
+  OPENSPEC_CHANGE_ID_MAX,
   OPENSPEC_CHANGE_TITLE_MAX,
+  openSpecChangeId,
   REVIEW_FOLLOW_UPS_MAX,
   REVIEW_SUMMARY_MAX,
   REVIEW_SUMMARY_TRUNCATED,
@@ -895,5 +897,21 @@ describe("factory API contracts (§10.1)", () => {
     expect(FactoryOpenSpecChangeResponse.parse(JSON.parse(JSON.stringify(response)))).toEqual(
       response,
     );
+  });
+});
+
+describe("OpenSpec change ids (§10.1)", () => {
+  it("folds a title to a folder id that can never leave openspec/changes/", () => {
+    expect(openSpecChangeId("../../Café / Passwörd!")).toBe("cafe-password");
+    expect(openSpecChangeId("  Add gift cards  ")).toBe("add-gift-cards");
+    expect(openSpecChangeId("!!!")).toBe("change");
+    expect(openSpecChangeId("Add gift cards")).not.toMatch(/[./]/);
+  });
+
+  it("caps the id and never derives a Windows device name", () => {
+    expect(openSpecChangeId("x".repeat(300))).toHaveLength(OPENSPEC_CHANGE_ID_MAX);
+    expect(openSpecChangeId("CON")).toBe("change-con");
+    expect(openSpecChangeId("lpt9")).toBe("change-lpt9");
+    expect(openSpecChangeId("console")).toBe("console");
   });
 });

@@ -15,6 +15,7 @@ import {
   OPENSPEC_CHANGE_EXISTS,
   OPENSPEC_CHANGE_ROOT_UNSAFE,
   type OpenSpecChangeRef,
+  openSpecChangeId,
   type Project,
 } from "@codeden/contracts";
 import { conflict } from "../errors";
@@ -146,15 +147,6 @@ export function readOpenSpecChanges(
   return changes;
 }
 
-/** Longest change id created from the app, so the folder name stays a comfortable file name. */
-const CHANGE_ID_MAX = 100;
-
-/**
- * Names Windows reserves for devices: a folder with one of them can't be created there, in any
- * case. A title that unfolds to one gets a prefix so it stays a valid folder.
- */
-const WINDOWS_DEVICE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/;
-
 /** Whether a path exists at all, without following a symlink. */
 function hasEntry(path: string): boolean {
   try {
@@ -163,25 +155,6 @@ function hasEntry(path: string): boolean {
   } catch {
     return false;
   }
-}
-
-/**
- * A change folder id from a title: lowercase letters, digits and single hyphens, with accents
- * folded (`Café` becomes `cafe`). Nothing else survives, so a title can never make the folder
- * leave `openspec/changes/`; a title with no usable character becomes `change`, and a Windows
- * device name (`CON`, `NUL`, `COM1`…) gets `change-` so the folder can be created there too.
- */
-export function openSpecChangeId(title: string): string {
-  const id =
-    title
-      .normalize("NFKD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, CHANGE_ID_MAX)
-      .replace(/-+$/, "") || "change";
-  return WINDOWS_DEVICE.test(id) ? `change-${id}` : id;
 }
 
 /**
@@ -255,6 +228,13 @@ export function writeOpenSpecChange(
     } catch {
       // The write error is the one worth reporting.
     }
+    // A plain file can take the folder's place between the check and the write; that is a
+    // blocked path, not an internal failure, so it gets the same 409 as a checked one.
+    if ((error as NodeJS.ErrnoException).code === "ENOTDIR")
+      throw conflict(
+        `The OpenSpec change \`${id}\` can't be written: a file blocks \`openspec/changes/${id}\`. A change is only ever written inside the project.`,
+        OPENSPEC_CHANGE_ROOT_UNSAFE,
+      );
     throw error;
   }
   return { id, path: `openspec/changes/${id}` };

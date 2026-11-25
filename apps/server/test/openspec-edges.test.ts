@@ -10,13 +10,9 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { OPENSPEC_CHANGE_ROOT_UNSAFE, type Project } from "@codeden/contracts";
+import { OPENSPEC_CHANGE_ROOT_UNSAFE, openSpecChangeId, type Project } from "@codeden/contracts";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  openSpecChangeId,
-  readOpenSpecChanges,
-  writeOpenSpecChange,
-} from "../src/services/factory/openspec";
+import { readOpenSpecChanges, writeOpenSpecChange } from "../src/services/factory/openspec";
 
 /**
  * The OpenSpec change helpers on the edges of a filesystem: Windows device names, an oversized
@@ -145,5 +141,17 @@ describe("OpenSpec change folders that are symbolic links", () => {
     );
     symlinkSync(outside, join(root, "openspec"), "dir");
     expect(readOpenSpecChanges({ path: root } as Project)).toEqual([]);
+  });
+});
+
+describe("OpenSpec change folder blocked by a plain file", () => {
+  it("returns a conflict, not a raw filesystem error, and leaves the file alone", () => {
+    const p = project();
+    const blocked = join(changesRoot(p), "add-login");
+    writeFileSync(blocked, "not a folder");
+    expect(() => writeOpenSpecChange(p, { title: "Add login", body: "Sign in." })).toThrow(
+      expect.objectContaining({ status: 409, code: OPENSPEC_CHANGE_ROOT_UNSAFE }),
+    );
+    expect(readFileSync(blocked, "utf8")).toBe("not a folder");
   });
 });

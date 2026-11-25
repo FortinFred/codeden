@@ -15,9 +15,10 @@ import {
   OPENSPEC_CHANGE_EXISTS,
   OPENSPEC_CHANGE_ROOT_UNSAFE,
   OPENSPEC_NOT_WORK_SOURCE,
+  openSpecChangeId,
+  type Project,
 } from "@codeden/contracts";
 import { afterEach, describe, expect, it } from "vitest";
-import { openSpecChangeId } from "../src/services/factory/openspec";
 import { createFactoryEnv, type FactoryEnv } from "./support/factory-env";
 import { factorySteps } from "./support/factory-steps";
 
@@ -352,6 +353,65 @@ describe("creating an OpenSpec change from the app (#33)", () => {
         env.factory.createOpenSpecChange(env.project.id, { title: "Add login", body: "" }),
       ),
     ).toMatchObject({ status: 409, code: OPENSPEC_NOT_WORK_SOURCE });
+    expect(existsSync(join(env.project.path, "openspec"))).toBe(false);
+  });
+});
+
+/**
+ * Pull requests, CI and merge still run on GitHub, so an OpenSpec work source on a local project
+ * could never finish a change. The rule is refused at both doors (the mode switch and New
+ * change), before anything is written.
+ */
+describe("the OpenSpec work source needs a GitHub project (#75)", () => {
+  /** The error a call refused with, whether it throws now or rejects. */
+  async function rejectionOf(run: () => unknown): Promise<{ status?: number; code?: string }> {
+    try {
+      await run();
+    } catch (error) {
+      return error as { status?: number; code?: string };
+    }
+    throw new Error("Expected the call to be refused");
+  }
+
+  // A local project carries no GitHub repo; the factory only reads the kind.
+  const localProject = () => env.updateProject({ kind: "local" } as Partial<Project>);
+
+  it("refuses the work source when a person switches a local project to it", async () => {
+    env = createFactoryEnv();
+    const local = localProject();
+    expect(
+      await rejectionOf(() =>
+        env.factory.setMode(local.id, {
+          mode: "software_factory",
+          limits: local.factoryLimits,
+          tuning: { workSource: "openspec", minBacklog: 0 },
+        } as Parameters<FactoryEnv["factory"]["setMode"]>[1]),
+      ),
+    ).toMatchObject({ status: 400, code: "openspec_needs_github" });
+    expect(env.factory.data.loopOrNew(local.id, env.now()).tuning.workSource).not.toBe("openspec");
+    expect(existsSync(join(env.project.path, "openspec"))).toBe(false);
+  });
+
+  it("still switches a GitHub project to the OpenSpec work source", async () => {
+    env = createFactoryEnv();
+    await env.factory.setMode(env.project.id, {
+      mode: "software_factory",
+      limits: env.project.factoryLimits,
+      tuning: { workSource: "openspec", minBacklog: 0 },
+    } as Parameters<FactoryEnv["factory"]["setMode"]>[1]);
+    expect(env.factory.data.loopOrNew(env.project.id, env.now()).tuning.workSource).toBe(
+      "openspec",
+    );
+  });
+
+  it("refuses a New change on a local project", async () => {
+    env = createFactoryEnv();
+    const local = localProject();
+    expect(
+      await rejectionOf(() =>
+        env.factory.createOpenSpecChange(local.id, { title: "Add login", body: "Sign in." }),
+      ),
+    ).toMatchObject({ status: 400, code: "openspec_needs_github" });
     expect(existsSync(join(env.project.path, "openspec"))).toBe(false);
   });
 });

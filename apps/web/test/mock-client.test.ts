@@ -89,6 +89,23 @@ describe("mock client", () => {
     expect((await client.updateSettings(clear)).tokenSaver.projects).toEqual({});
   });
 
+  it("slugs a New change title the same way the server does", async () => {
+    const client = createMockClient();
+    // Kept in step with openSpecChangeId's own cases: a title must fold to one folder id.
+    const cases: Array<[string, string]> = [
+      ["  Add gift cards  ", "add-gift-cards"],
+      ["../../Café / Passwörd!", "cafe-password"],
+      ["!!!", "change"],
+      ["CON", "change-con"],
+      ["x".repeat(300), "x".repeat(100)],
+    ];
+    for (const [title, id] of cases) {
+      const created = client.factory.createOpenSpecChange("p-storefront", { title, body: "" });
+      await vi.advanceTimersByTimeAsync(500);
+      expect((await created).change).toEqual({ id, path: `openspec/changes/${id}` });
+    }
+  });
+
   it("searches transcripts like the server: every term, highlighted, case-insensitively", async () => {
     const client = createMockClient();
     const p = client.searchTranscripts({ q: "WEBHOOKS retried" });
