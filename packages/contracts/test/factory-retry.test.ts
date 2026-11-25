@@ -41,8 +41,9 @@ describe("retrying stopped factory work (#259)", () => {
       mode: "rereview",
       label: null,
     });
+    // A size failure waits on the PM to split or allow it: Retry must not be offered (#55).
     const tooLarge = { ...failed, reason: "ci: failed; size: 6,000 lines in 2 files" };
-    expect(stoppedRetry(tooLarge)?.label).toBeNull();
+    expect(stoppedRetry(tooLarge)).toBeNull();
     expect(stoppedRetry({ ...failed, stage: "rejected" })?.label).toBeNull();
   });
 

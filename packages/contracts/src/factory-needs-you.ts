@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { FactoryItemStage } from "./factory-api";
-import type { FactoryFailureKind } from "./factory-prs";
+import { type FactoryFailureKind, isSizeFailure } from "./factory-prs";
 
 /**
  * "Needs you" (§10.1): the one definition of factory work that waits on a person. The Factory
@@ -38,6 +38,8 @@ export interface FactoryNeedItem {
   updatedAt: string;
   /** Revise rounds so far. */
   attempts: number;
+  /** Why it stopped; a `size: ` failure waits on the PM instead (no Retry). */
+  reason?: string | null;
 }
 
 /** What is known around the item. */
@@ -72,6 +74,8 @@ export function factoryNeed(
   if (item.stage === "escalated") return "merge";
   if (item.stage === "failed") {
     if (ctx.recovering) return null;
+    // Over the size limit: the PM splits it or allows it, so no person's Retry is asked for.
+    if (isSizeFailure(item.reason)) return null;
     if (ctx.ownsOpenPr) return "retry";
     const at = Date.parse(item.finishedAt ?? item.updatedAt);
     return ctx.now - at < FACTORY_FAILED_SHOWN_MS ? "retry_or_dismiss" : null;
