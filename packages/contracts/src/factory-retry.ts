@@ -20,12 +20,13 @@ export const FactoryRetryMode = z.enum(["rereview", "rebuild"]);
 export type FactoryRetryMode = z.infer<typeof FactoryRetryMode>;
 
 /**
- * The body of `POST /api/projects/:id/factory/items/:itemId/retry`. Without a mode, an item whose
- * pull request is still open is re-reviewed, and any other is rebuilt.
+ * The body of `POST /api/projects/:id/factory/items/:itemId/retry`. Without a mode, stuck work and
+ * work without an open pull request are rebuilt, and any other item whose pull request is still
+ * open is re-reviewed.
  */
 export const FactoryRetryOptions = z.object({
   mode: FactoryRetryMode.optional().describe(
-    "`rereview` (the default when its pull request is open): a fresh review of the open PR, no new build. `rebuild`: start over from the first step, replacing the PR.",
+    "`rereview` (the default for unstuck work while its pull request is open): a fresh review of the open PR, no new build; refused for stuck work, which only a rebuild can move on. `rebuild`: start over from the first step, replacing the PR; the default for stuck work and without an open PR.",
   ),
 });
 export type FactoryRetryOptions = z.infer<typeof FactoryRetryOptions>;
@@ -47,9 +48,15 @@ export interface StoppedItem {
 
 /** What Retry offers a stopped item. */
 export interface StoppedRetry {
-  /** What Retry does by default: `rereview` while its own PR is open, otherwise `rebuild`. */
+  /**
+   * What Retry does by default: `rebuild` for stuck work and without an open PR, `rereview`
+   * otherwise.
+   */
   mode: FactoryRetryMode;
-  /** The open PR a re-review resumes; null when there is none (only `rebuild` applies). */
+  /**
+   * Its open PR: what a re-review resumes, or what a rebuild replaces; null when there is none
+   * (only `rebuild` applies).
+   */
   pr: GitHubPrRef | null;
   /**
    * What a failed item with an open PR needs, plainly: "Stopped after N revise rounds; needs a
@@ -63,16 +70,21 @@ export interface StoppedRetry {
 /**
  * Whether a factory item can be retried, and how: stopped work (failed or rejected) can; anything
  * else (null) can't. A size failure can't either: it waits on the PM to split or allow it.
+ *
+ * Stuck work (`failureKind: stuck`: CI can never run, kept conflicting after its rebuild) is
+ * rebuilt, never re-reviewed, whatever its PR's state: a re-review would only repeat the failure.
  */
 export function stoppedRetry(item: StoppedItem): StoppedRetry | null {
   if (item.stage !== "failed" && item.stage !== "rejected") return null;
   if (isSizeFailure(item.reason)) return null;
   const open = item.pr?.state === "open" || item.pr?.state === "draft";
   const pr = open ? item.pr : null;
-  const needsReview = pr !== null && item.stage === "failed" && item.failureKind !== "stuck";
+  const stuck = item.failureKind === "stuck";
+  const rereview = pr !== null && !stuck;
+  const needsReview = rereview && item.stage === "failed";
   const n = item.attempts;
   return {
-    mode: pr ? "rereview" : "rebuild",
+    mode: rereview ? "rereview" : "rebuild",
     pr,
     label: needsReview
       ? `Stopped after ${n} revise round${n === 1 ? "" : "s"}; needs a re-review (Retry)`

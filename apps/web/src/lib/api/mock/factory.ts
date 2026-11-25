@@ -572,10 +572,14 @@ export function mockFactoryApi(world: MockWorld): FactoryApi {
     retry: async (id, itemId, opts) => {
       const it = item(id, itemId);
       const open = it.pr?.state === "open" || it.pr?.state === "draft";
-      // With its PR open the PR goes back to review; otherwise the work starts over.
-      return opts?.mode !== "rebuild" && open
-        ? { ...it, stage: "verifying", review: null, attempts: 0 }
-        : { ...it, stage: "backlog", pr: null };
+      // Like the server: stuck work is never re-reviewed, and an open PR re-reviews by default.
+      if (opts?.mode === "rereview" && it.failureKind === "stuck") {
+        throw new Error("Stuck work can only move on by starting over: retry it as a rebuild");
+      }
+      const rebuild = opts?.mode === "rebuild" || !open || it.failureKind === "stuck";
+      return rebuild
+        ? { ...it, stage: "backlog", pr: null }
+        : { ...it, stage: "verifying", review: null, attempts: 0 };
     },
     dismiss: async (id, itemId, req) => {
       const dismissed = {

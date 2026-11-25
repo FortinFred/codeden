@@ -232,13 +232,19 @@ describe("the per-item spend cap (#325)", () => {
   it("gives a re-reviewed item a fresh allowance too", async () => {
     env = capped({ usd: 5 });
     await enable();
-    const { id, builder } = await verifying();
-    env.spendOn(builder, 6, { ts: daysAgo(1) });
-    await tick();
-    expect(item(id).failureKind).toBe("stuck");
-    // Its PR is still open: Retry sends it back to a fresh review.
+    const { id } = await verifying();
+    // Its revise rounds ran out with the PR still open, and it isn't stuck: Retry re-reviews
+    // it, and that resets the per-item allowance like a rebuild does.
+    env.factory.data.updateItem(id, (i) => ({
+      ...i,
+      stage: "failed",
+      failureKind: "checks",
+      reason: "review: request_changes: still has gaps",
+      itemBudgetSince: daysAgo(1),
+    }));
     env.factory.retry(env.project.id, id, "rereview");
     expect(item(id).stage).toBe("verifying");
+    expect(item(id).itemBudgetSince).not.toBe(daysAgo(1));
     await tick();
     expect(item(id).stage).toBe("verifying");
     expect(item(id).reviewerSessionId).toBeTruthy();

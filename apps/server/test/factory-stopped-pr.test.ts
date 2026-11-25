@@ -159,6 +159,24 @@ describe("Retry with an open PR", () => {
     expect(() => env.factory.retry(env.project.id, id, "rereview")).toThrow(/no open pull request/);
     expect(env.factory.retry(env.project.id, id)).toMatchObject({ stage: "backlog", pr: null });
   });
+
+  it("rebuilds stuck work by default, and refuses an explicit re-review of it (#74)", async () => {
+    env = createFactoryEnv();
+    await enable("dark_factory");
+    const { id, pr } = await verifying();
+    review(id, CHANGES);
+    failed(id);
+    env.factory.data.updateItem(id, (i) => ({
+      ...i,
+      failureKind: "stuck",
+      reason: "CI can never run: GitHub Actions is off",
+    }));
+    // A re-review of #172 would only repeat the failure it is stuck on.
+    expect(() => env.factory.retry(env.project.id, id, "rereview")).toThrow(/stuck.*rebuild/i);
+    expect(item(id)).toMatchObject({ stage: "failed", pr: { number: pr.ref.number } });
+    // The shared default starts it over instead, replacing the PR.
+    expect(env.factory.retry(env.project.id, id)).toMatchObject({ stage: "backlog", pr: null });
+  });
 });
 
 describe("factory_retry_item and trust", () => {

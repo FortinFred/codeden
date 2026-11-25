@@ -140,11 +140,14 @@ export const factoryAllowLargeChange = defineTool({
     }),
 });
 
-/** `factory_retry_item`: the PM runs a stopped item again (its open PR back to review, or a rebuild). */
+/**
+ * `factory_retry_item`: the PM runs a stopped item again (its open PR back to review, or a
+ * rebuild; stuck work always rebuilds).
+ */
 export const factoryRetryItem = defineTool({
   name: "factory_retry_item",
   description:
-    "Run a stopped factory item (failed, or stopped at its first step) again. While its pull request is open, `rereview` (the default then) sends that PR straight back to a fresh review of its current head, with fresh revise rounds: no new build, no second PR; it merges on approve as usual. `rebuild` (the default without an open PR) starts over from the first step (reproduce or analyze) and replaces the PR. Use it for an item factory_status shows as stopped with a note like 'needs a re-review (Retry)', for example when its PR was fixed or rebased after its last review; not for one that fails for a reason nobody fixed. Work let in from an untrusted author is retried only when the user asked you to in this turn.",
+    "Run a stopped factory item (failed, or stopped at its first step) again. For unstuck work, `rereview` (the default while its pull request is open) sends that PR straight back to a fresh review of its current head, with fresh revise rounds: no new build, no second PR; it merges on approve as usual. `rebuild` (the default for stuck work and without an open PR) starts over from the first step (reproduce or analyze) and replaces the PR. Stuck work (factory_status says CI can never run there, or it kept conflicting after its rebuild) is never re-reviewed: re-reviewing it would only repeat the same failure, so an explicit `rereview` is refused and you should rebuild. Use it for an item factory_status shows as stopped with a note like 'needs a re-review (Retry)', for example when its PR was fixed or rebased after its last review; not for one that fails for a reason nobody fixed. Work let in from an untrusted author is retried only when the user asked you to in this turn.",
   roles: ["pm"],
   scope: "project",
   alwaysLoad: true,
@@ -158,7 +161,15 @@ export const factoryRetryItem = defineTool({
         services.factory.item(projectId, input.itemId),
       );
       const item = services.factory.retry(projectId, input.itemId, input.mode, "pm");
-      return { itemId: item.id, stage: item.stage, pr: item.pr?.number ?? null, note: item.note };
+      // What it did, so the PM can tell the user: stuck work never gets a re-review.
+      const mode = item.stage === "verifying" ? "rereview" : "rebuild";
+      return {
+        itemId: item.id,
+        mode,
+        stage: item.stage,
+        pr: item.pr?.number ?? null,
+        note: item.note,
+      };
     }),
 });
 

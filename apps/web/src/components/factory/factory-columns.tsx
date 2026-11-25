@@ -235,8 +235,8 @@ export function RecentColumn({
           );
         }
         // Stopped work: Retry right here (its open PR back to review, or a fresh attempt).
-        // Stuck work can only move on by starting over; re-reviewing a PR whose CI can never
-        // pass would loop forever (#69, as #61 for the Needs you lane).
+        // Stuck work can only move on by starting over; the shared rule defaults it to Rebuild,
+        // so re-reviewing a PR whose CI can never pass would loop forever (#69, #61, #74).
         return (
           <div key={w.id} className={cn(rowCls, "pr-1")} data-testid="factory-stopped-item">
             <Link
@@ -247,7 +247,7 @@ export function RecentColumn({
             >
               {row}
             </Link>
-            <RetryButton projectId={projectId} item={w} mode={stuck ? "rebuild" : undefined} />
+            <RetryButton projectId={projectId} item={w} />
           </div>
         );
       })}
