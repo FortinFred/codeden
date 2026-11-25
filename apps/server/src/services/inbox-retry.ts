@@ -57,5 +57,5 @@ export async function retryRunFailed(deps: InboxRetryDeps, id: string): Promise<
       message,
     );
   }
-  return deps.inbox.close(deps.inbox.get(id), "resolved", { note: "retry" });
+  return deps.inbox.settle(deps.inbox.get(id), { by: "codeden", note: "retry" });
 }

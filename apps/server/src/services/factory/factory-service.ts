@@ -461,7 +461,8 @@ export class FactoryService {
     if (on)
       return { on, stoppedSessions: await this.halt(projectId), draining: false, inFlight: 0 };
     const drained = this.deps.inbox.find(drainInboxId(projectId));
-    if (drained?.status === "open") this.deps.inbox.close(drained, "resolved", { note: "resumed" });
+    if (drained?.status === "open")
+      this.deps.inbox.settle(drained, { by: "factory", note: "resumed" });
     await this.serialize(projectId, "resume after kill", () => this.resumeAfterKill(projectId));
     return { on, stoppedSessions: [], draining: false, inFlight: 0 };
   }
@@ -512,7 +513,8 @@ export class FactoryService {
       });
     });
     const paused = this.deps.inbox.find(`inbox:factory-paused:${projectId}`);
-    if (paused?.status === "open") this.deps.inbox.close(paused, "resolved", { note: "resumed" });
+    if (paused?.status === "open")
+      this.deps.inbox.settle(paused, { by: "factory", note: "resumed" });
     this.soon(projectId);
     return next;
   }

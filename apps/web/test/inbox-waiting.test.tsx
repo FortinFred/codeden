@@ -27,6 +27,14 @@ function closed(item: InboxItem, status: "resolved" | "dismissed"): InboxItem {
   return { ...item, status, resolvedAt: new Date(0).toISOString() };
 }
 
+function withResolution(
+  item: InboxItem,
+  status: "resolved" | "dismissed",
+  resolution: InboxItem["resolution"],
+): InboxItem {
+  return { ...closed(item, status), resolution };
+}
+
 describe("the inbox counts only what waits on you (#63)", () => {
   it("keeps notices out of the header and tab counts, counting them apart", () => {
     const counts = inboxCounts(inboxItems, 1);
@@ -73,6 +81,40 @@ describe("the inbox tells a dismissal from a resolution (#63)", () => {
     });
     const label = await screen.findByText(/^(Resolved|Dismissed)/);
     expect(label.textContent).toMatch(/^Resolved/);
+  });
+
+  it("shows the reason a factory settlement carries", async () => {
+    renderWithClient(
+      <InboxEntry
+        item={withResolution(fixture("ib-pr"), "resolved", { by: "factory", note: "merged" })}
+      />,
+      undefined,
+      { withRouter: true },
+    );
+    const label = await screen.findByText(/^Resolved/);
+    expect(label.textContent).toContain("merged");
+  });
+
+  it("shows a bare note written without a settlement (a person's resolution, an older close)", async () => {
+    renderWithClient(
+      <InboxEntry item={withResolution(fixture("ib-pr"), "resolved", { note: "PR #58 merged" })} />,
+      undefined,
+      { withRouter: true },
+    );
+    const label = await screen.findByText(/^Resolved/);
+    expect(label.textContent).toContain("PR #58 merged");
+  });
+
+  it("keeps a dismissed entry's wording, with its note", async () => {
+    renderWithClient(
+      <InboxEntry
+        item={withResolution(fixture("ib-audit"), "dismissed", { note: "nothing to act on" })}
+      />,
+      undefined,
+      { withRouter: true },
+    );
+    const label = await screen.findByText(/^Dismissed/);
+    expect(label.textContent).toContain("nothing to act on");
   });
 
   it("heads the closed section neutrally", async () => {

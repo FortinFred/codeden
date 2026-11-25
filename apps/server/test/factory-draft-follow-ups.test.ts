@@ -1,3 +1,4 @@
+import { InboxSettlement } from "@codeden/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { advanceVerifying, DRAFT_NOTE, READY_RECHECK_MS } from "../src/services/factory/verify";
 import { createFactoryEnv, type FactoryEnv } from "./support/factory-env";
@@ -60,12 +61,31 @@ describe("draft pull request follow-ups (#68)", () => {
     await tick();
 
     expect(item(id).note).toBe(DRAFT_NOTE);
-    expect(env.inbox.find(`inbox:factory-ready:${id}`)?.status).not.toBe("open");
+    const ready = env.inbox.find(`inbox:factory-ready:${id}`);
+    expect(ready?.status).toBe("resolved");
+    // The Inbox shows a settled item's reason by parsing its resolution as `InboxSettlement`
+    // (`settledNote`): a close that doesn't match it renders no reason at all.
+    expect(InboxSettlement.safeParse(ready?.resolution)).toMatchObject({
+      success: true,
+      data: { note: "The pull request was converted to a draft" },
+    });
 
     // Marked ready again: the normal path announces it afresh instead of leaving it resolved.
     pr.ref = { ...pr.ref, state: "open" };
     await tick();
     expect(env.inbox.find(`inbox:factory-ready:${id}`)?.status).toBe("open");
+  });
+
+  it("refuses to merge a draft pull request, as GitHub does", async () => {
+    env = createFactoryEnv();
+    await enable();
+    const { pr } = await verifying("success", "Draft refusal", 14);
+    pr.ref = { ...pr.ref, state: "draft" };
+
+    await expect(
+      env.gh.merge(env.project.id, pr.ref.number, { sha: pr.headSha, title: "Draft refusal" }),
+    ).rejects.toMatchObject({ status: 422, code: "github_validation" });
+    expect(env.gh.merges).toEqual([]);
   });
 
   it("lets the PM allow a size-failed draft without waiting for someone to mark it ready", async () => {

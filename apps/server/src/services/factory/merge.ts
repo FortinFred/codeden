@@ -35,7 +35,7 @@ export function prInboxIds(itemId: string): string[] {
 export function closeInboxFor(ctx: FactoryContext, itemId: string, note: string): void {
   for (const id of prInboxIds(itemId)) {
     const open = ctx.inbox.find(id);
-    if (open?.status === "open") ctx.inbox.close(open, "resolved", { note });
+    if (open?.status === "open") ctx.inbox.settle(open, { by: "factory", note });
   }
 }
 
@@ -248,7 +248,7 @@ export async function autoMerge(
   });
   withdrawRequests(ctx, current);
   const ready = ctx.inbox.find(readyInboxId(current.id));
-  if (ready?.status === "open") ctx.inbox.close(ready, "resolved", { note: "merged" });
+  if (ready?.status === "open") ctx.inbox.settle(ready, { by: "factory", note: "merged" });
   if (current.issue && current.source !== "revert") {
     const passed = checks
       .filter((c) => c.state === "pass")

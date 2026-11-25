@@ -87,7 +87,8 @@ export const InboxItem = z.object({
   resolvedAt: Timestamp.nullable(),
   /**
    * How it was resolved (decision, answers, note). Items CodeDen settles by itself carry
-   * `{ by: "codeden" | "factory", note }` (`InboxSettlement`).
+   * `{ by: "codeden" | "factory", note }` (`InboxSettlement`); a person resolving one with a
+   * note, and closes written before settlements said who, carry a bare `{ note }`.
    */
   resolution: JsonValue.nullable(),
 });
