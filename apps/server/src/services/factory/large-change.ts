@@ -39,7 +39,7 @@ export function allowLargeChange(
       "not_verifiable",
     );
   }
-  if (item.pr?.state !== "open") {
+  if (item.pr?.state !== "open" && item.pr?.state !== "draft") {
     throw conflict(`Item ${item.id} has no open pull request`, "no_open_pr");
   }
   // A failed item comes back only if size is what stopped it; any other failure it had then
