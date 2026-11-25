@@ -25,6 +25,15 @@ export const FactoryFailureKind = z.enum(["checks", "infrastructure", "stuck"]);
 export type FactoryFailureKind = z.infer<typeof FactoryFailureKind>;
 
 /**
+ * A failure on the size limit (`tooLarge`): the PM splits the work or allows it as one change,
+ * so nothing asks for a re-review or a Retry. The reason starts with `size: ` (or carries it
+ * after another failed check).
+ */
+export function isSizeFailure(reason: string | null | undefined): boolean {
+  return /(^|; )size: /.test(reason ?? "");
+}
+
+/**
  * A factory PR's state, as the panel shows it:
  * - `checking`: the merge checks are running (the review, tests, evidence);
  * - `waiting_ci`: CI is running, or yet to start, on the head commit;

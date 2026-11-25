@@ -1,6 +1,7 @@
 import {
   type FactoryPrEntry,
   type FactoryWorkItem,
+  isSizeFailure,
   type StoppedItem,
   stoppedRetry,
 } from "@codeden/contracts";
@@ -69,6 +70,8 @@ export function stoppedLabel(item: Item, pr: Pr): string | null {
       return "CI can't run on this repository";
     return "Stuck: needs a person";
   }
+  // Over the size limit: the PM splits the work or allows it, so nothing asks for a Retry.
+  if (isSizeFailure(item.reason)) return "Waiting on the PM to split or allow it";
   // The shared rule's words, without the button's name: the action sits right beside them.
   const label = stoppedRetry(asStopped(item))?.label;
   if (label) return label.replace(/\s*\(Retry\)$/, "");

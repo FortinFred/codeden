@@ -62,6 +62,19 @@ describe("stopped items (#264)", () => {
     ]);
   });
 
+  it("leaves a size failure to the PM instead of offering Retry (#55)", () => {
+    // `tooLarge` stops with a `size: …` reason and wakes the PM to split or allow it; Retry
+    // would re-review work nobody asked to re-review.
+    const tooLarge = failed("too-large", 11, {
+      pr: prRef(17),
+      attempts: 1,
+      failureKind: "checks",
+      reason: "size: 6,000 lines in 2 files",
+    });
+    expect(stoppedAction(tooLarge, null)).toBeNull();
+    expect(stoppedLabel(tooLarge, null)).toMatch(/PM/);
+  });
+
   it("reads a rebuild's open original PR as its own", () => {
     const rebuild = failed("rebuild", 8, {
       pr: null,
