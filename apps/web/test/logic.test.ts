@@ -101,7 +101,7 @@ describe("read aloud", () => {
 });
 
 describe("inbox grouping", () => {
-  it("puts asks first and drops empty groups", () => {
+  it("puts asks first and drops empty groups, listing only what waits on you", () => {
     const groups = groupInbox(inboxItems);
     expect(groups.map((g) => g.id)).toEqual([
       "approval",
@@ -110,28 +110,44 @@ describe("inbox grouping", () => {
       "spec_approval",
       // Setup commands changed since a person last saw them (#390) wait for an answer.
       "setup_change",
+      "triage",
+    ]);
+    // A failed run the factory handles is a notice, not a problem waiting on a person (#63).
+    expect(groupInbox(inboxItems, "problems")).toEqual([]);
+    expect(groupInbox(inboxItems, "reviews")).toEqual([]);
+  });
+  it("lists the notices apart, keeping their group titles (#63)", () => {
+    expect(groupInbox(inboxItems, "notices").map((g) => g.id)).toEqual([
       "pr_review",
       // The factory's merges set aside for a person's look (#380), one item per project.
       "spot_check",
       "run_failed",
-      "triage",
       "automation_result",
       // An automation switched off because its file changed what it does (#389).
       "message",
     ]);
-    expect(groupInbox(inboxItems, "problems").map((g) => g.id)).toEqual(["run_failed"]);
   });
-  it("counts tabs including conflicts", () => {
-    expect(inboxCounts(inboxItems, 1)).toEqual({ all: 12, asks: 6, reviews: 4, problems: 2 });
+  it("counts tabs including conflicts, and notices apart (#63)", () => {
+    expect(inboxCounts(inboxItems, 1)).toEqual({
+      all: 6,
+      asks: 6,
+      reviews: 0,
+      problems: 0,
+      notices: 6,
+    });
   });
-  it("shows worktrees that couldn't be removed with the problems", () => {
-    const base = inboxItems.find((i) => i.kind === "run_failed");
-    if (!base) throw new Error("fixture");
-    const items = [...inboxItems, { ...base, id: "cleanup", kind: "cleanup_failed" as const }];
+  it("shows worktrees that couldn't be removed with the problems when they wait on you", () => {
+    const failed = inboxItems
+      .filter((i) => i.kind === "run_failed")
+      .map((i) => ({ ...i, priority: "high" as const }));
+    const first = failed[0];
+    if (!first) throw new Error("fixture");
+    const items = [...failed, { ...first, id: "cleanup", kind: "cleanup_failed" as const }];
     expect(groupInbox(items, "problems").map((g) => g.id)).toEqual([
       "run_failed",
       "cleanup_failed",
     ]);
+    expect(groupInbox(items, "all").map((g) => g.id)).toContain("cleanup_failed");
   });
 });
 

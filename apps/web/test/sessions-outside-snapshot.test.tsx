@@ -48,6 +48,11 @@ async function withoutInSnapshot(client: CodeDenClient, ids: string[]) {
   });
 }
 
+/** Show the notices: a failed run the factory doesn't handle is a notice (#63). */
+async function openNotices() {
+  fireEvent.click(await screen.findByRole("button", { name: /^Notices/ }));
+}
+
 /** The rendered inbox entry of an item. */
 async function entry(id: string): Promise<HTMLElement> {
   return waitFor(() => {
@@ -64,6 +69,7 @@ describe("Run failed actions for a session outside the snapshot", () => {
     await withoutInSnapshot(client, ["s-deps"]);
     const retry = vi.spyOn(client, "retryInbox");
     renderWithClient(<InboxPage />, client, { withRouter: true });
+    await openNotices();
     const codex = await entry("ib-failed");
     await waitFor(() =>
       expect(within(codex).getByRole("button", { name: /Retry/ })).toHaveProperty("disabled", true),
@@ -85,6 +91,7 @@ describe("Run failed actions for a session outside the snapshot", () => {
       new ApiRequestError(409, "provider_unavailable", "Claude Code hit its usage limit"),
     );
     const { queryClient } = renderWithClient(<InboxPage />, client, { withRouter: true });
+    await openNotices();
     const claude = await entry("ib-failed-a11y");
     // The view looks the session up by id, so the toast can offer the hand-off.
     await waitFor(() => expect(queryClient.getQueryData(sessionRecordKey("s-a11y"))).toBeTruthy());

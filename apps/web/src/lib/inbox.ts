@@ -1,6 +1,11 @@
 import { type InboxItem, type InboxItemKind, inboxWaitsOnYou } from "@codeden/contracts";
 
-export type InboxFilter = "all" | "asks" | "reviews" | "problems";
+/**
+ * The inbox tabs. `all`, `asks`, `reviews` and `problems` show what waits on the user; `notices`
+ * shows the rest (a PR ready, a spot-check, a failed run the factory handles, the digest), which
+ * need no action.
+ */
+export type InboxFilter = "all" | "asks" | "reviews" | "problems" | "notices";
 
 export interface InboxGroup {
   id: InboxItemKind;
@@ -24,14 +29,22 @@ const GROUPS: { id: InboxItemKind; title: string; filter: Exclude<InboxFilter, "
 
 const priorityRank = { high: 0, normal: 1, low: 2 };
 
-/** Open items grouped by kind (asks first), sorted by priority then newest. Empty groups dropped. */
+/**
+ * Open items grouped by kind (asks first), sorted by priority then newest. Empty groups dropped.
+ * The tabs that wait on the user (`all`, `asks`, `reviews`, `problems`) hold only items
+ * `inboxWaitsOnYou` names; `notices` holds the rest, which need no action. A notice is never
+ * counted or listed under Reviews (#63).
+ */
 export function groupInbox(items: InboxItem[], filter: InboxFilter = "all"): InboxGroup[] {
   const open = items.filter((i) => i.status === "open");
-  return GROUPS.filter((g) => filter === "all" || g.filter === filter)
+  const shown = open.filter((i) =>
+    filter === "notices" ? !inboxWaitsOnYou(i) : inboxWaitsOnYou(i),
+  );
+  return GROUPS.filter((g) => filter === "all" || filter === "notices" || g.filter === filter)
     .map((g) => ({
       id: g.id,
       title: g.title,
-      items: open
+      items: shown
         .filter((i) => i.kind === g.id)
         .sort(
           (a, b) =>
@@ -56,7 +69,10 @@ export function splitForDismiss(items: InboxItem[]): { dismiss: InboxItem[]; sta
   return { dismiss, stay };
 }
 
-/** Count per filter tab. */
+/**
+ * Count per filter tab. Only what waits on the user is counted, conflicts included (they wait on
+ * the user in every case); notices count under their own tab, never under Reviews (#63).
+ */
 export function inboxCounts(items: InboxItem[], conflicts: number): Record<InboxFilter, number> {
   const count = (f: InboxFilter) => groupInbox(items, f).reduce((n, g) => n + g.items.length, 0);
   return {
@@ -64,5 +80,6 @@ export function inboxCounts(items: InboxItem[], conflicts: number): Record<Inbox
     asks: count("asks") + conflicts,
     reviews: count("reviews"),
     problems: count("problems"),
+    notices: count("notices"),
   };
 }
