@@ -5,9 +5,11 @@ import {
   type FactoryWorkItem,
   factoryNeed,
   factoryNeedLabel,
+  isSizeFailure,
   type SessionStatus,
 } from "@codeden/contracts";
 import { stepLabel } from "@/components/factory/meta";
+import { stoppedKind, stoppedLabel } from "@/components/factory/stopped-items";
 
 /**
  * The Factory view's pipeline (§10.1): every work item of `factory_status` placed on one stage
@@ -193,7 +195,15 @@ export function needOf(
   });
   if (!kind) return null;
   const prNumber = openPrNumber(w, pr);
-  return { kind, label: factoryNeedLabel(kind, { attempts: w.attempts, prNumber }) };
+  // Stuck work says why in the shared stopped-work words, and gets a Rebuild rather than the
+  // Retry that would re-review a pull request whose checks can never pass (#61).
+  const stuck = stoppedKind(w, pr) === "stuck";
+  return {
+    kind,
+    label:
+      (stuck ? stoppedLabel(w, pr) : null) ??
+      factoryNeedLabel(kind, { attempts: w.attempts, prNumber }),
+  };
 }
 
 /**
@@ -222,8 +232,10 @@ export function placeOf(
       return sameLocalDay(w.mergedAt ?? w.updatedAt, now) ? "merged" : null;
     case "failed":
       // A failure outside its code goes back by itself, to review when its PR is open (and
-      // within the last day, as the server keeps them); others that need nothing are old news.
-      if (!w.recovering) return null;
+      // within the last day, as the server keeps them). Over the size limit is the PM's call,
+      // but it still failed: draw it where it stopped so it is not invisible (#61). Others
+      // that need nothing are old news.
+      if (!w.recovering && !isSizeFailure(w.reason)) return null;
       if (ownsOpenPr(w, pr)) return "reviewing";
       return now - Date.parse(w.finishedAt ?? w.updatedAt) < DAY_MS ? "building" : null;
     default:
@@ -258,7 +270,11 @@ function activityOf(
   pr: FactoryPrEntry | null,
   session: SessionInfo | undefined,
 ): string {
-  const outcome = w.stage === "failed" || w.stage === "escalated" ? (w.reason ?? w.note) : null;
+  // A size failure reads in the shared stopped-work words; other failures and escalations keep
+  // their own reason, and a stuck item's lane action below says why in those same words (#61).
+  const stopped = w.stage === "failed" && isSizeFailure(w.reason) ? stoppedLabel(w, pr) : null;
+  const outcome =
+    w.stage === "failed" || w.stage === "escalated" ? (stopped ?? w.reason ?? w.note) : null;
   return (
     outcome ??
     session?.progress ??
