@@ -16,6 +16,7 @@ import { ago } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CHECK_HELP, CHECK_LABEL, STAGE_LABEL } from "./meta";
 import { RetryButton } from "./retry-button";
+import { stoppedKind, stoppedLabel } from "./stopped-items";
 
 function Column({ title, count, children }: { title: string; count: number; children: ReactNode }) {
   return (
@@ -207,12 +208,17 @@ export function RecentColumn({
     <Column title="Recent merges & reverts" count={recent.length}>
       {recent.map((w) => {
         const s = recentIcon[w.stage as keyof typeof recentIcon] ?? recentIcon.merged;
+        // Stuck work says why in the shared stopped-work words, as on the board and item page.
+        const stuck = stoppedKind(w, null) === "stuck";
         const row = (
           <>
             <s.icon className={cn("size-3.5 shrink-0", s.cls)} />
             <span
               className={cn("truncate", w.stage === "rejected" && "text-muted-foreground")}
-              title={[w.reason, w.note].filter(Boolean).join(" · ") || undefined}
+              title={
+                (stuck ? stoppedLabel(w, null) : null) ??
+                ([w.reason, w.note].filter(Boolean).join(" · ") || undefined)
+              }
             >
               {w.title}
             </span>
@@ -229,6 +235,8 @@ export function RecentColumn({
           );
         }
         // Stopped work: Retry right here (its open PR back to review, or a fresh attempt).
+        // Stuck work can only move on by starting over; re-reviewing a PR whose CI can never
+        // pass would loop forever (#69, as #61 for the Needs you lane).
         return (
           <div key={w.id} className={cn(rowCls, "pr-1")} data-testid="factory-stopped-item">
             <Link
@@ -239,7 +247,7 @@ export function RecentColumn({
             >
               {row}
             </Link>
-            <RetryButton projectId={projectId} item={w} />
+            <RetryButton projectId={projectId} item={w} mode={stuck ? "rebuild" : undefined} />
           </div>
         );
       })}
