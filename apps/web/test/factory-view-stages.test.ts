@@ -436,7 +436,7 @@ describe("the factory's pull requests on the view (#181)", () => {
     );
     expect(p.stages.merge).toEqual([]);
     expect(p.needsYou.map((c) => [c.item.id, c.state, c.need?.label])).toEqual([
-      ["stuck", "person", "Retry: stopped with PR #30 open"],
+      ["stuck", "person", "Rebuilt once and still conflicting"],
     ]);
     expect(p.needsPerson).toBe(1);
     // It still failed: the header counts it there too.
@@ -584,7 +584,7 @@ describe("work the capped PR list leaves out (#181)", () => {
     });
     const p = viewPipeline(status({ viewRecent: [rebuild] }), new Map(), NOW);
     expect(p.needsYou.map((c) => [c.item.id, c.state, c.need?.label])).toEqual([
-      ["rebuild", "person", "Retry: stopped with PR #52 open"],
+      ["rebuild", "person", "Stuck: needs a person"],
     ]);
     expect(p.needsPerson).toBe(1);
     expect(p.failed).toBe(1);

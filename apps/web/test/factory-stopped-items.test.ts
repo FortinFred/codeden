@@ -73,6 +73,12 @@ describe("stopped items (#264)", () => {
     });
     expect(stoppedAction(tooLarge, null)).toBeNull();
     expect(stoppedLabel(tooLarge, null)).toMatch(/PM/);
+    // The server shows a failed check's PR as `waiting_for_you`; the size failure is still the
+    // PM's, not a person's to merge.
+    const waiting = prEntry("too-large", 17, { state: "waiting_for_you" });
+    expect(stoppedKind(tooLarge, waiting)).toBeNull();
+    expect(stoppedLabel(tooLarge, waiting)).toMatch(/PM/);
+    expect(stoppedAction(tooLarge, waiting)).toBeNull();
   });
 
   it("reads a rebuild's open original PR as its own", () => {
