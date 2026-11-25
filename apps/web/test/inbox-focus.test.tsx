@@ -46,7 +46,7 @@ describe("inbox focus from a toast", () => {
     });
     renderWithClient(<InboxPage focusItemId="cf-audit" />, client, { withRouter: true });
     // The snapshot's items are on screen before the conflicts: nothing to scroll to yet.
-    await screen.findByText("Accessibility fixes on the product page");
+    await screen.findByText("Force push to codeden/fix-checkout-flake");
     await frame();
     expect(scrolledTo()).toEqual([]);
 

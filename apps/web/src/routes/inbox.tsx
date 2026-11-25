@@ -1,9 +1,9 @@
-import type { InboxItem } from "@codeden/contracts";
+import { type InboxItem, inboxWaitsOnYou } from "@codeden/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCheck, Inbox } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EmptyState, SectionLabel } from "@/components/common/bits";
-import { DismissView, useBulkDismiss } from "@/components/inbox/bulk-dismiss";
+import { DismissView, type StayingItem, useBulkDismiss } from "@/components/inbox/bulk-dismiss";
 import { FOCUSED_ENTRY, InboxEntry, inboxEntryId } from "@/components/inbox/inbox-entry";
 import { ConflictCard } from "@/components/project/conflict-card";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ const FILTERS: { id: InboxFilter; label: string }[] = [
   { id: "asks", label: "Needs an answer" },
   { id: "reviews", label: "Reviews" },
   { id: "problems", label: "Problems" },
+  { id: "notices", label: "Notices" },
 ];
 
 const failedRuns = (n: number) => `${n} failed run${n === 1 ? "" : "s"}`;
@@ -62,8 +63,9 @@ function InboxLoading() {
 }
 
 /**
- * Inbox (§11.1): everything waiting on you, answerable in place. `focusItemId` (a toast's Open)
- * scrolls that item into view and highlights it.
+ * Inbox (§11.1): everything waiting on you, answerable in place, with the notices that need no
+ * action under their own tab. `focusItemId` (a toast's Open) scrolls that item into view and
+ * highlights it.
  */
 export function InboxPage({ focusItemId }: { focusItemId?: string }) {
   const client = useClient();
@@ -77,7 +79,7 @@ export function InboxPage({ focusItemId }: { focusItemId?: string }) {
   const conflictList = conflicts.data ?? [];
   const groups = groupInbox(items, filter);
   const counts = inboxCounts(items, conflictList.length);
-  const resolved = items.filter((i) => i.status !== "open").slice(0, 5);
+  const closed = items.filter((i) => i.status !== "open").slice(0, 5);
   // Conflicts count under All and Needs an answer: there, nothing is listed and no count shown
   // until they're known, so the header, the tabs and the list agree.
   const countKnown = (f: InboxFilter) => loaded && !(conflictFilters.has(f) && conflicts.isPending);
@@ -93,19 +95,27 @@ export function InboxPage({ focusItemId }: { focusItemId?: string }) {
           ? "conflicts-error"
           : "empty";
 
-  // A toast's Open: show every item, then scroll once the target has actually rendered, from
+  // A toast's Open shows every item, then scrolls once the target has actually rendered, from
   // the snapshot or (a conflict, whose record id is its inbox item id) the conflicts query.
   // Conflicts and groups are on screen only in the list body: conflicts that load before the
   // snapshot sit behind the loading rows, and count once the list replaces them.
+  //
+  // The tab follows the target once the snapshot names it: a notice is listed under its own tab,
+  // not with what waits on the user. A conflict is not in the snapshot, so it stays on All, and
+  // a later snapshot update doesn't move a tab the person chose.
+  const focusFilterSet = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (focusItemId) setFilter("all");
-  }, [focusItemId]);
+    if (!focusItemId || !loaded || focusFilterSet.current === focusItemId) return;
+    const target = items.find((i) => i.id === focusItemId);
+    setFilter(target && !inboxWaitsOnYou(target) ? "notices" : "all");
+    focusFilterSet.current = focusItemId;
+  }, [focusItemId, loaded, items]);
   const focusRendered =
     focusItemId !== undefined &&
     [
       ...(body === "list" && showConflicts ? conflictList.map((c) => c.id) : []),
       ...(body === "list" ? groups.flatMap((g) => g.items.map((i) => i.id)) : []),
-      ...resolved.map((i) => i.id),
+      ...closed.map((i) => i.id),
     ].includes(focusItemId);
   useEffect(() => {
     if (!focusItemId || !focusRendered) return;
@@ -117,12 +127,15 @@ export function InboxPage({ focusItemId }: { focusItemId?: string }) {
     return () => cancelAnimationFrame(frame);
   }, [focusItemId, focusRendered]);
 
-  // "Dismiss N" acts on what the view lists: the active tab's groups. Its conflicts stay.
+  // "Dismiss N" acts on what the view lists: the active tab's groups. Everything that waits on
+  // the user stays: the start conflicts, and the items a view of notices leaves out (#63).
   const viewItems = body === "list" ? groups.flatMap((g) => g.items) : NO_ITEMS;
-  const viewConflicts =
-    body === "list" && showConflicts
-      ? conflictList.map((c) => ({ id: c.id, title: `Already running: ${c.request.purpose}` }))
-      : [];
+  const staying: StayingItem[] = [
+    ...conflictList.map((c) => ({ id: c.id, title: `Already running: ${c.request.purpose}` })),
+    ...groupInbox(items, "all")
+      .flatMap((g) => g.items)
+      .map((i) => ({ id: i.id, title: i.title })),
+  ];
 
   return (
     <>
@@ -130,7 +143,7 @@ export function InboxPage({ focusItemId }: { focusItemId?: string }) {
         icon={<Inbox />}
         title="Inbox"
         meta={countKnown("all") ? `${counts.all} waiting on you` : "Loading…"}
-        actions={<DismissView items={viewItems} alsoStaying={viewConflicts} />}
+        actions={<DismissView items={viewItems} alsoStaying={staying} />}
       />
       <div className="min-h-0 flex-1 overflow-y-auto scroll-thin">
         <div className="mx-auto w-full max-w-3xl px-4 py-5 sm:px-6 sm:py-6">
@@ -175,7 +188,8 @@ export function InboxPage({ focusItemId }: { focusItemId?: string }) {
             </EmptyState>
           ) : body === "empty" ? (
             <EmptyState icon={<CheckCheck />} title="You're all caught up" className="py-24">
-              Questions, approvals, PRs ready for review and failed runs show up here.
+              Questions, approvals, specs and setup changes show up here. Notices that need no
+              action are under the Notices tab.
             </EmptyState>
           ) : (
             <div className="space-y-9">
@@ -214,11 +228,11 @@ export function InboxPage({ focusItemId }: { focusItemId?: string }) {
             </div>
           )}
 
-          {resolved.length > 0 && (
+          {closed.length > 0 && (
             <section className="mt-12">
-              <SectionLabel className="mb-3">Recently resolved</SectionLabel>
+              <SectionLabel className="mb-3">Recently closed</SectionLabel>
               <div className="space-y-3">
-                {resolved.map((item) => (
+                {closed.map((item) => (
                   <InboxEntry key={item.id} item={item} focused={item.id === focusItemId} />
                 ))}
               </div>

@@ -74,12 +74,14 @@ export const FOCUSED_ENTRY =
  */
 export function InboxEntry({ item, focused = false }: { item: InboxItem; focused?: boolean }) {
   const project = useProject(item.projectId);
-  const resolved = item.status !== "open";
+  // Closed either way; only a resolved item says so, a dismissal is not a resolution (#63).
+  const closed = item.status !== "open";
+  const resolved = item.status === "resolved";
   const mirrors = item.kind === "approval" || item.kind === "question";
   return (
     <article
       id={inboxEntryId(item.id)}
-      className={cn(resolved ? "opacity-60" : "animate-rise", focused && FOCUSED_ENTRY)}
+      className={cn(closed ? "opacity-60" : "animate-rise", focused && FOCUSED_ENTRY)}
       data-kind={item.kind}
       data-focused={focused || undefined}
     >
@@ -123,7 +125,7 @@ export function InboxEntry({ item, focused = false }: { item: InboxItem; focused
           )}
         </span>
       </div>
-      {mirrors && !resolved ? (
+      {mirrors && !closed ? (
         <MirroredRequest item={item} />
       ) : item.kind === "triage" ? (
         <TriageCard item={item} />
@@ -144,15 +146,20 @@ export function InboxEntry({ item, focused = false }: { item: InboxItem; focused
                 {item.body}
               </p>
             ))}
-          {item.kind === "pr_review" && !resolved && <PrReviewStatus item={item} />}
-          {!resolved && (
+          {item.kind === "pr_review" && !closed && <PrReviewStatus item={item} />}
+          {!closed && (
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
               <InboxActions item={item} />
             </div>
           )}
-          {resolved && (
-            <p className="mt-2 text-2xs text-status-done">
-              Resolved {item.resolvedAt ? ago(item.resolvedAt) : ""}
+          {closed && (
+            <p
+              className={cn(
+                "mt-2 text-2xs",
+                resolved ? "text-status-done" : "text-muted-foreground",
+              )}
+            >
+              {resolved ? "Resolved" : "Dismissed"} {item.resolvedAt ? ago(item.resolvedAt) : ""}
               {settledNote(item) && ` · ${settledNote(item)}`}
             </p>
           )}
