@@ -8,6 +8,7 @@ import {
   type GitHubPrRef,
   isFactoryMode,
   LESSONS_IN_BRIEF,
+  type PipelineStep,
   type Project,
   pipelineStep,
   type ScoutStatus,
@@ -30,13 +31,35 @@ import { ACTIVE_STAGES, DONE_STAGES, VIEW_ITEMS, WAITING_STAGES } from "./store"
 import { wipOf } from "./wip";
 
 /**
+ * The session the view shows as working on the item: a working reviewer or builder, never an idle
+ * one over a busy one. In review the reviewer wins a tie (it owns the step); elsewhere the
+ * builder does. Between turns, the step's own session is shown, as before. A conflicting PR whose
+ * author is gone is rebased by an integrator, which the loop keeps as the builder while the item
+ * is still in review, so the card no longer looks idle (#57).
+ */
+function activeSessionOf(
+  i: FactoryItem,
+  step: PipelineStep,
+  busy: (sessionId: string) => boolean,
+): string | null {
+  const reviewer = i.reviewerSessionId;
+  const builder = i.builderSessionId;
+  if (step === "review" && reviewer && busy(reviewer)) return reviewer;
+  if (builder && busy(builder)) return builder;
+  if (reviewer && busy(reviewer)) return reviewer;
+  return step === "review" && reviewer ? reviewer : builder;
+}
+
+/**
  * A work item for the panel and the pipeline diagram; `owned` is the open PR the factory still
- * owns for it (`ownedPr`), `cost` what it cost so far (`item-cost.ts`).
+ * owns for it (`ownedPr`), `cost` what it cost so far (`item-cost.ts`), `busy` whether one of its
+ * sessions is working right now (`activeSessionOf`).
  */
 export function workItem(
   i: FactoryItem,
   owned: GitHubPrRef | null = null,
   cost: FactoryItemCost | null = null,
+  busy: (sessionId: string) => boolean = () => false,
 ): FactoryWorkItem {
   const step = pipelineStep(i);
   return {
@@ -49,8 +72,7 @@ export function workItem(
     score: i.score,
     sessionId: i.builderSessionId,
     reviewerSessionId: i.reviewerSessionId,
-    activeSessionId:
-      step === "review" && i.reviewerSessionId ? i.reviewerSessionId : i.builderSessionId,
+    activeSessionId: activeSessionOf(i, step, busy),
     stage: i.stage,
     step,
     type: i.type,
@@ -106,6 +128,11 @@ export async function buildStatus(ctx: FactoryContext, projectId: string): Promi
   const done = all.filter((i) => DONE_STAGES.includes(i.stage)).slice(0, 30);
   const ignored = all.filter((i) => i.stage === "ignored").slice(0, 30);
   const owned = (i: FactoryItem) => ownedPr(ctx, i);
+  // Who is actually working, for `activeSessionId` (a gone session is not).
+  const busy = (sessionId: string) => {
+    const session = ctx.repo.find(sessionId)?.session;
+    return session !== undefined && isBusy(session);
+  };
   const { failedSince, mergedSince } = viewWindow(ctx.now());
   // Not capped like `recent` (nor by the view's item limit): an older escalation or
   // open failure still reaches the view.
@@ -118,7 +145,7 @@ export async function buildStatus(ctx: FactoryContext, projectId: string): Promi
   const costs = await itemCosts(ctx, projectId, project.factoryLimits, [
     ...new Map([...waiting, ...active, ...done, ...viewRecent].map((i) => [i.id, i])).values(),
   ]);
-  const toWork = (i: FactoryItem) => workItem(i, owned(i), costs.get(i.id) ?? null);
+  const toWork = (i: FactoryItem) => workItem(i, owned(i), costs.get(i.id) ?? null, busy);
   const spend = budgetSpend(ctx, projectId, localDay(ctx.now()), project.factoryLimits);
   const globalKill = ctx.settings.get().factory.killSwitch;
   const githubLogin = isFactoryMode(project.autonomyMode)
