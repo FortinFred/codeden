@@ -108,7 +108,7 @@ export interface ViewCard {
   activity: string;
   /** Since when it has been in its current step. */
   since: string;
-  /** The session working on it now (the reviewer while reviewing). */
+  /** The session working on it now (a working reviewer or builder; see `activeSessionId`). */
   sessionId: string | null;
   /** What it needs from a person; set on the cards of the "Needs you" lane only. */
   need: ViewNeed | null;

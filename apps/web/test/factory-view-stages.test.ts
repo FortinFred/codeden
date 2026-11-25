@@ -207,6 +207,55 @@ describe("the Factory view's pipeline (#181)", () => {
     expect(card("review")?.sessionId).toBe("s5r");
   });
 
+  it("follows the session that is actually working, an integrator or a reviewer (#57)", () => {
+    // A conflicting PR whose author is gone: the integrator runs as the builder while the item
+    // is still in review, and the reviewer it outlived is between turns.
+    const integrating = viewPipeline(
+      status({
+        inProgress: [
+          w("integrating", 60, {
+            stage: "verifying",
+            step: "review",
+            sessionId: "s-integrator",
+            reviewerSessionId: "s-reviewer",
+            activeSessionId: "s-integrator",
+          }),
+        ],
+      }),
+      new Map<string, SessionInfo>([
+        ["s-integrator", { status: "running", progress: "Rebasing onto main" }],
+        ["s-reviewer", { status: "idle", progress: null }],
+      ]),
+      NOW,
+    );
+    const rebasing = integrating.stages.reviewing[0];
+    expect(rebasing?.sessionId).toBe("s-integrator");
+    expect(rebasing?.state).toBe("running");
+    expect(rebasing?.activity).toBe("Rebasing onto main");
+
+    // The reviewer working: it owns the card, not the idle builder.
+    const reviewing = viewPipeline(
+      status({
+        inProgress: [
+          w("reviewing", 61, {
+            stage: "verifying",
+            step: "review",
+            sessionId: "s-builder",
+            reviewerSessionId: "s-reviewer",
+            activeSessionId: "s-reviewer",
+          }),
+        ],
+      }),
+      new Map<string, SessionInfo>([
+        ["s-builder", { status: "idle", progress: null }],
+        ["s-reviewer", { status: "running", progress: "Checking the tests" }],
+      ]),
+      NOW,
+    );
+    expect(reviewing.stages.reviewing[0]?.sessionId).toBe("s-reviewer");
+    expect(reviewing.stages.reviewing[0]?.state).toBe("running");
+  });
+
   it("announces cards that move, and none that stay", () => {
     const before = placesOf(p);
     expect(describeMoves(before, p)).toEqual([]);
