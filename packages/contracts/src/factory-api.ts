@@ -858,7 +858,10 @@ export const FactoryWorkItem = z.object({
   sessionId: Id.nullable(),
   /** The independent reviewer's session, once there is one. */
   reviewerSessionId: Id.nullable().default(null),
-  /** The session working on it right now (the reviewer while reviewing), for the diagram. */
+  /**
+   * The session working on it right now: a working reviewer or builder (in review, the reviewer
+   * wins a tie), else the step's own session. For the diagram and the item sheet.
+   */
   activeSessionId: Id.nullable().default(null),
   stage: FactoryItemStage,
   step: PipelineStep.default("intake"),
