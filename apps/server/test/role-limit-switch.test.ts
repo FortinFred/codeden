@@ -113,13 +113,13 @@ describe("role sessions: switching provider at a usage limit (§8.1)", () => {
       const old = await pmAtLimit(env, RESET_AT);
 
       expect(env.livePms().map((s) => [s.id, s.provider, s.status])).toEqual([
-        [old.id, "claude", "failed"],
+        [old.id, "claude", "idle"],
       ]);
       expect(env.stopped).toEqual([]);
       const [notice] = switchNotices(env.repo, old);
       expect(notice?.reason).toBe("no_fallback");
       expect(notice?.message).toContain("no other provider is ready to take over");
-      // The failure is still the user's to see, as before.
+      // The failure is the user's to see once: the one item for the run, not one per message.
       expect(env.inbox.list({ sessionId: old.id }).map((i) => [i.kind, i.status])).toEqual([
         ["run_failed", "open"],
       ]);
@@ -240,7 +240,7 @@ describe("role sessions: switching provider at a usage limit (§8.1)", () => {
       env.providers(BOTH);
       env.setQuietly({ providers: { autoSwitchOnLimit: false } });
       const old = await pmAtLimit(env, RESET_AT);
-      expect(env.livePms().map((s) => [s.id, s.status])).toEqual([[old.id, "failed"]]);
+      expect(env.livePms().map((s) => [s.id, s.status])).toEqual([[old.id, "idle"]]);
       expect(switchNotices(env.repo, old)).toEqual([]);
 
       env.setQuietly({});

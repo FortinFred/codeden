@@ -31,8 +31,8 @@ const usage = (retryAt: string): ErrorInfo => ({
   retryAt,
 });
 
-describe("the reducer leaves passing failures of agent sessions to auto-retry", () => {
-  const fail = (role: "agent" | "pm", error: ErrorInfo) => {
+describe("the reducer holds passing failures for their retry path", () => {
+  const fail = (role: "agent" | "pm" | "orchestrator", error: ErrorInfo) => {
     const p = new MemoryProjection();
     p.addSession({ ...sampleSession, role, status: "starting", projectId: "p1" });
     p.apply(
@@ -44,18 +44,22 @@ describe("the reducer leaves passing failures of agent sessions to auto-retry", 
     return { status: p.session().status, inbox: [...p.inbox.values()].map((i) => i.kind) };
   };
 
-  it("keeps the session idle with no inbox item for transient failures and usage limits", () => {
+  it("keeps an agent session idle with no inbox item for transient failures and usage limits", () => {
     expect(fail("agent", transient)).toEqual({ status: "idle", inbox: [] });
     expect(fail("agent", usage("2026-11-10T20:00:00.000Z"))).toEqual({ status: "idle", inbox: [] });
   });
 
-  it("fails everything else, and role sessions, at once", () => {
+  it("keeps a role session idle with its one run_failed item, and fails everything else at once", () => {
     expect(fail("agent", { message: "boom" })).toEqual({ status: "failed", inbox: ["run_failed"] });
     expect(fail("agent", { message: "x", kind: "auth" })).toEqual({
       status: "failed",
       inbox: ["run_failed"],
     });
-    expect(fail("pm", transient)).toEqual({ status: "failed", inbox: ["run_failed"] });
+    expect(fail("pm", transient)).toEqual({ status: "idle", inbox: ["run_failed"] });
+    expect(fail("orchestrator", usage("2026-11-10T20:00:00.000Z"))).toEqual({
+      status: "idle",
+      inbox: ["run_failed"],
+    });
   });
 });
 

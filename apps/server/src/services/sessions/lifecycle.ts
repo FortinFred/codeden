@@ -8,6 +8,7 @@ import { and, asc, desc, eq } from "drizzle-orm";
 import type { Db } from "../../db/client";
 import { rowToItemRecord } from "../../db/rows";
 import { items } from "../../db/schema";
+import { holdsQueuedMessages } from "../../events/reducer/retry";
 import type { EventStore } from "../../events/store";
 import type { McpTokenStore } from "../../mcp/tokens";
 import type { SettingsStore } from "../../settings-store";
@@ -79,7 +80,7 @@ export class SessionLifecycle {
         const { session } = e.payload as { session: Session };
         if (ENDED.has(session.status)) this.deps.tokens.revokeSession(session.id);
         const settled = session.status === "idle" || session.status === "failed";
-        if (settled && this.deps.sessions.hasOutbox(session.id)) {
+        if (settled && this.deps.sessions.hasOutbox(session.id) && !this.holdsQueue(session)) {
           setImmediate(() => void this.deps.sessions.flushOutbox(session.id));
         }
       } else if (
@@ -119,6 +120,17 @@ export class SessionLifecycle {
     } finally {
       this.titling.delete(sessionId);
     }
+  }
+
+  /**
+   * Whether the session's queued messages wait for its own retry path: a PM or orchestrator
+   * whose last root turn failed for a passing reason keeps them until its provider switch, its
+   * next use after the limit resets, or a message starts a turn. An agent's queue is delivered
+   * as before, which cancels its pending automatic retry.
+   */
+  private holdsQueue(session: Session): boolean {
+    if (session.role === "agent") return false;
+    return holdsQueuedMessages(session, this.deps.repo.lastRootTurn(session));
   }
 
   private scheduleDrain(): void {
