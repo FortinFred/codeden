@@ -34,7 +34,7 @@ import {
 import type { Db } from "../../db/client";
 import { rowToItemRecord, rowToSession, rowToTurn } from "../../db/rows";
 import { automationRuns, checkpoints, items, sessions, turns } from "../../db/schema";
-import { turnsOldestFirst } from "../../db/turn-order";
+import { turnsNewestFirst, turnsOldestFirst } from "../../db/turn-order";
 import type { EventStore } from "../../events/store";
 import { notFound } from "../errors";
 import type { RoleFallback } from "../orchestration/role-fallback";
@@ -477,6 +477,19 @@ export class SessionRepo {
       .select()
       .from(turns)
       .where(and(eq(turns.sessionId, sessionId), eq(turns.id, turnId)))
+      .get();
+    return row ? rowToTurn(row) : null;
+  }
+
+  /** The latest turn of the session's root thread, or null when it has none. */
+  lastRootTurn(session: Session): Turn | null {
+    if (!session.rootThreadId) return null;
+    const row = this.db
+      .select()
+      .from(turns)
+      .where(and(eq(turns.sessionId, session.id), eq(turns.threadId, session.rootThreadId)))
+      .orderBy(...turnsNewestFirst)
+      .limit(1)
       .get();
     return row ? rowToTurn(row) : null;
   }
