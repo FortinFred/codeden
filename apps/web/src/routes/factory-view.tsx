@@ -1,7 +1,7 @@
 import { type FactoryStatus, isFactoryMode, type Session, type Snapshot } from "@codeden/contracts";
 import { Link } from "@tanstack/react-router";
 import { Bot, Factory, MessageSquare } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/common/bits";
 import type { SceneChat } from "@/components/factory-view/floor/floor-scene";
 import { useChatColumn, useNow, useRoomy, useWide } from "@/components/factory-view/hooks";
@@ -125,13 +125,18 @@ export function FactoryViewPage({ projectId }: { projectId: string }) {
   const sceneChat: SceneChat = chatColumn
     ? { docked: true, open: chatOpen, setOpen: setChatOpen }
     : { docked: false, open: sceneOverlay, setOpen: setSceneOverlay };
-  // The open card by id, so its sheet follows the card as it moves.
+  // The open card by id, so its sheet follows the card as it moves. An item the pipeline no
+  // longer draws (dismissed, or aged out of the view) closes the sheet instead of leaving it on
+  // a stale card whose actions the server would now refuse.
   const [selected, setSelected] = useState<ViewCard | null>(null);
   const current = useMemo(() => {
     if (!selected || !pipeline) return selected;
     const all = [...Object.values(pipeline.stages).flat(), ...pipeline.needsYou];
-    return all.find((c) => c.item.id === selected.item.id) ?? selected;
+    return all.find((c) => c.item.id === selected.item.id) ?? null;
   }, [selected, pipeline]);
+  useEffect(() => {
+    if (selected && !current && pipeline) setSelected(null);
+  }, [selected, current, pipeline]);
 
   if (!snapshot)
     return (
