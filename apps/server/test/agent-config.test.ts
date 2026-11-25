@@ -335,6 +335,41 @@ describe("agent configuration API", () => {
     expect(git.status).toBe(403);
   });
 
+  it("refuses to delete a home .github skill folder", async () => {
+    put(join(h.home, ".github", "skills", "leak", "SKILL.md"), "---\nname: leak\n---\n");
+    const res = await h.api(
+      "DELETE",
+      "/agent-config/file?root=home&path=.github/skills/leak&folder=1",
+    );
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ error: { code: "path_not_allowed" } });
+    expect(existsSync(join(h.home, ".github", "skills", "leak", "SKILL.md"))).toBe(true);
+
+    const read = await h.api(
+      "GET",
+      `/agent-config/file?root=home&path=${encodeURIComponent(".github/skills/leak/SKILL.md")}`,
+    );
+    expect(read.status).toBe(403);
+
+    for (const path of [".github", ".github/skills", ".github/skills/leak/SKILL.md"]) {
+      const notASkillFolder = await h.api(
+        "DELETE",
+        `/agent-config/file?root=home&path=${encodeURIComponent(path)}&folder=1`,
+      );
+      expect(notASkillFolder.status, path).toBe(403);
+    }
+  });
+
+  it("deletes a project .github skill folder", async () => {
+    put(join(h.repo, ".github", "skills", "temp-docs", "SKILL.md"), "---\nname: temp-docs\n---\n");
+    const res = await h.api(
+      "DELETE",
+      `/agent-config/file?root=project&projectId=${h.projectId}&path=.github/skills/temp-docs&folder=1`,
+    );
+    expect(res.body).toMatchObject({ deleted: true });
+    expect(existsSync(join(h.repo, ".github", "skills", "temp-docs"))).toBe(false);
+  });
+
   it("edits MCP servers in .mcp.json, ~/.claude.json and config.toml, with previews", async () => {
     const spec = { type: "stdio", command: "npx", args: ["-y", "@acme/mcp"], env: { KEY: "v" } };
     const claudeJsonBefore = readFileSync(join(h.home, ".claude.json"), "utf8");
