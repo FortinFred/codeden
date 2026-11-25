@@ -58,8 +58,18 @@ const ALLOWED: Record<AgentConfigLocator["root"], RegExp[]> = {
   auto_memory: [/^.+\.md$/i],
 };
 
-/** A skill folder: `<skills root>/<name>` (deleted as a whole). */
-const SKILL_FOLDER = /^(\.claude|\.codex|\.copilot|\.agents|\.github)\/skills\/[^/.][^/]*$/i;
+/**
+ * Skill folders (`<skills root>/<name>`, deleted as a whole) per root. The check is per root,
+ * so a delete is never wider than a write: `.github` skills are a project location only.
+ */
+const SKILL_FOLDERS: Record<AgentConfigLocator["root"], RegExp[]> = {
+  home: [/^(\.claude|\.codex|\.copilot|\.agents)\/skills\/[^/.][^/]*$/i],
+  project: [
+    /^(\.claude|\.codex|\.copilot|\.agents)\/skills\/[^/.][^/]*$/i,
+    /^(.+\/)?\.github\/skills\/[^/.][^/]*$/i,
+  ],
+  auto_memory: [],
+};
 
 const sha256 = (data: Buffer | string) => createHash("sha256").update(data).digest("hex");
 
@@ -90,7 +100,7 @@ export class AgentConfigFiles {
       throw forbidden("Not an agent configuration file", "path_not_allowed");
     }
     const ok = opts.folder
-      ? locator.root !== "auto_memory" && SKILL_FOLDER.test(relativePath)
+      ? SKILL_FOLDERS[locator.root].some((re) => re.test(relativePath))
       : ALLOWED[locator.root].some((re) => re.test(relativePath));
     if (!ok)
       throw forbidden(`Not an agent configuration file: ${relativePath}`, "path_not_allowed");
