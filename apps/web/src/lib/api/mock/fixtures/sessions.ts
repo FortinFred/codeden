@@ -398,6 +398,32 @@ export const inboxItems: InboxItem[] = [
     automationRunId: "run-298",
     createdAt: ago(60 * 20),
   }),
+  // Closed items that show why they closed: a factory settlement (the shape the factory writes)
+  // and a bare note (a person's resolution, or a close written before settlements said who).
+  inbox({
+    id: "ib-evidence-factory",
+    kind: "pr_review",
+    status: "resolved",
+    title: "Gift cards at checkout",
+    body: "Every check passed before the pull request was converted to a draft.",
+    projectId: "p-storefront",
+    createdAt: ago(18),
+    updatedAt: ago(5),
+    resolvedAt: ago(5),
+    resolution: { by: "factory", note: "The pull request was converted to a draft" },
+  }),
+  inbox({
+    id: "ib-evidence-bare",
+    kind: "automation_result",
+    status: "resolved",
+    title: "Nightly notes export",
+    body: "The export finished and the automation closed its run.",
+    projectId: "p-notes",
+    createdAt: ago(60 * 26),
+    updatedAt: ago(60 * 25),
+    resolvedAt: ago(60 * 25),
+    resolution: { note: "PR #58 merged" },
+  }),
 ];
 
 export const conflicts: ConflictRecord[] = [
