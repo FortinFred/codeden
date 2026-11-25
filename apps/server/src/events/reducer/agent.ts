@@ -21,7 +21,7 @@ import {
   runFailedAgain,
   runFailedInbox,
 } from "./items";
-import { awaitsRetryDecision } from "./retry";
+import { holdsForRetry } from "./retry";
 import { isFactorySigninFailure, signinFailed, signinWorks } from "./signin";
 import type { Mutation, ProjectionReader } from "./types";
 import { accumulateUsage, hasTokenCounts, mergeLatestUsage } from "./usage";
@@ -167,11 +167,17 @@ function onTurnEnded(
     const current = d.getSession(sessionId)?.session;
     // A failed compaction leaves the conversation as it was: the session stays idle with the
     // turn's error, and nothing continues or retries it (compacting again is up to the user).
-    if (turn?.kind === "compact" || (current && awaitsRetryDecision(current, event.error))) {
+    if (turn?.kind === "compact") {
       setStatus(d, sessionId, "idle", ts);
       return;
     }
-    setStatus(d, sessionId, "failed", ts);
+    // A passing failure is held instead of failing the session: an agent waits for automatic
+    // retry, a PM or orchestrator for its provider switch or next use, with its queue intact.
+    const held = holdsForRetry(event.error);
+    setStatus(d, sessionId, held ? "idle" : "failed", ts);
+    // An agent's hold shows in AutoRetry's own notice; a role's path may switch provider or
+    // wait, so its one run_failed item is raised now (one per run, never per queued message).
+    if (held && (!current || current.role === "agent")) return;
     const session = d.getSession(sessionId)?.session;
     if (session && isFactorySigninFailure(session, event.error)) {
       // The factory moves the work elsewhere; the user gets the provider's one item.
