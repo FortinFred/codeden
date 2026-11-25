@@ -577,11 +577,25 @@ export function mockFactoryApi(world: MockWorld): FactoryApi {
         ? { ...it, stage: "verifying", review: null, attempts: 0 }
         : { ...it, stage: "backlog", pr: null };
     },
-    dismiss: async (id, itemId, req) => ({
-      ...item(id, itemId),
-      stage: "rejected",
-      reason: req?.reason ? `Dismissed by you: ${req.reason}` : "Dismissed by you",
-    }),
+    dismiss: async (id, itemId, req) => {
+      const dismissed = {
+        ...item(id, itemId),
+        stage: "rejected" as const,
+        reason: req?.reason ? `Dismissed by you: ${req.reason}` : "Dismissed by you",
+      };
+      // Like the server, the dismissed item leaves the pipeline the next status shows.
+      const s = status(id);
+      const rejected = (w: FactoryWorkItem) =>
+        w.id === itemId ? { ...w, stage: "rejected" as const, reason: dismissed.reason } : w;
+      world.factory.set(id, {
+        ...s,
+        backlog: s.backlog.map(rejected),
+        inProgress: s.inProgress.map(rejected),
+        recent: s.recent.map(rejected),
+        viewRecent: s.viewRecent.map(rejected),
+      });
+      return dismissed;
+    },
     async decideSpec(id, itemId, req) {
       const current = item(id, itemId).specApproval;
       if (current?.state !== "pending") throw new Error("This spec doesn't wait for approval");
