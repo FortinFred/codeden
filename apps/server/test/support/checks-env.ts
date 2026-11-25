@@ -271,7 +271,10 @@ export const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Wait for `check` to hold, up to a generous deadline. */
 export async function until(check: () => boolean): Promise<void> {
-  const deadline = Date.now() + 10_000;
+  // A worker can go seconds without CPU while the rest of `pnpm test` shares a small CI
+  // runner, so the deadline counts wall-clock stalls it never got to work through (CI saw a
+  // 10 s one). The 30 s stays inside the 40 s test timeout of these suites.
+  const deadline = Date.now() + 30_000;
   while (!check()) {
     if (Date.now() > deadline) throw new Error("timed out");
     await wait(5);
