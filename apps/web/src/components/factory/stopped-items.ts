@@ -37,6 +37,9 @@ function asStopped(item: Item): StoppedItem {
 
 /** Which kind of stopped work it is; null when it isn't stopped. */
 export function stoppedKind(item: Item, pr: Pr): StoppedKind | null {
+  // Over the size limit waits on the PM, not on a person, even while its PR is open (the server
+  // shows that PR as `waiting_for_you` because its checks failed): no Retry, no merge (#55).
+  if (item.stage === "failed" && isSizeFailure(item.reason)) return null;
   if (item.stage === "escalated" || pr?.state === "waiting_for_you") return "merge";
   if (item.stage === "failed")
     return item.failureKind === "stuck" || pr?.state === "stuck" ? "stuck" : "retry";
@@ -58,7 +61,13 @@ function mergeReason(item: Item, pr: Pr): string | null {
  */
 export function stoppedLabel(item: Item, pr: Pr): string | null {
   const kind = stoppedKind(item, pr);
-  if (!kind) return null;
+  if (!kind) {
+    // A size failure still has words for the board, though nobody can act from here: the PM
+    // splits the work or allows it as one change.
+    return item.stage === "failed" && isSizeFailure(item.reason)
+      ? "Waiting on the PM to split or allow it"
+      : null;
+  }
   if (kind === "merge") {
     const why = mergeReason(item, pr);
     return why ? `Yours to merge: ${why}` : "Yours to merge";
@@ -70,8 +79,6 @@ export function stoppedLabel(item: Item, pr: Pr): string | null {
       return "CI can't run on this repository";
     return "Stuck: needs a person";
   }
-  // Over the size limit: the PM splits the work or allows it, so nothing asks for a Retry.
-  if (isSizeFailure(item.reason)) return "Waiting on the PM to split or allow it";
   // The shared rule's words, without the button's name: the action sits right beside them.
   const label = stoppedRetry(asStopped(item))?.label;
   if (label) return label.replace(/\s*\(Retry\)$/, "");

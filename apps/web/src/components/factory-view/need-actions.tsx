@@ -1,7 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ExternalLink, FileCheck, MessageCircleQuestion, RotateCcw, X } from "lucide-react";
+import { ExternalLink, FileCheck, Hammer, MessageCircleQuestion, RotateCcw, X } from "lucide-react";
 import { toast } from "sonner";
+import { stoppedKind } from "@/components/factory/stopped-items";
 import { useRetryItem } from "@/components/factory/use-retry-item";
 import { Button } from "@/components/ui/button";
 import { useClient } from "@/lib/api";
@@ -30,7 +31,10 @@ export function NeedActions({
   const need = card.need;
   const name = cardNumber(card.item);
   const refresh = () => void queryClient.invalidateQueries({ queryKey: factoryKeys.all });
-  const retry = useRetryItem(projectId, card.item.id);
+  // Stuck work can only move on by starting over: rebuilding avoids a re-review of a pull
+  // request whose checks can never pass (#61).
+  const stuck = stoppedKind(card.item, card.pr) === "stuck";
+  const retry = useRetryItem(projectId, card.item.id, stuck ? "rebuild" : undefined);
   const dismiss = useMutation({
     mutationFn: () => client.factory.dismiss(projectId, card.item.id),
     onSuccess: () => {
@@ -60,9 +64,9 @@ export function NeedActions({
           variant="outline"
           onClick={() => retry.mutate()}
           disabled={busy}
-          aria-label={`Retry ${name}`}
+          aria-label={`${stuck ? "Rebuild" : "Retry"} ${name}`}
         >
-          <RotateCcw /> Retry
+          {stuck ? <Hammer /> : <RotateCcw />} {stuck ? "Rebuild" : "Retry"}
         </Button>
       )}
       {need.kind === "retry_or_dismiss" && (

@@ -1,6 +1,7 @@
-import type { FactoryWorkItem } from "@codeden/contracts";
+import type { FactoryPrEntry, FactoryWorkItem } from "@codeden/contracts";
 import { Link } from "@tanstack/react-router";
 import type { CSSProperties, ReactNode } from "react";
+import { stoppedKind } from "@/components/factory/stopped-items";
 import { useRetryItem } from "@/components/factory/use-retry-item";
 import { Button } from "@/components/ui/button";
 import { platform } from "@/lib/platform";
@@ -152,16 +153,27 @@ export function AgentCardView({
   );
 }
 
-function RetryAction({ projectId, item }: { projectId: string; item: FactoryWorkItem }) {
-  const retry = useRetryItem(projectId, item.id);
+function RetryAction({
+  projectId,
+  item,
+  pr,
+}: {
+  projectId: string;
+  item: FactoryWorkItem;
+  pr: FactoryPrEntry | null;
+}) {
+  // Stuck work can only move on by starting over; retrying would re-review a PR that can
+  // never pass (#61).
+  const stuck = stoppedKind(item, pr) === "stuck";
+  const retry = useRetryItem(projectId, item.id, stuck ? "rebuild" : undefined);
   return (
     <Button
       size="xs"
       disabled={retry.isPending}
       onClick={() => retry.mutate()}
-      aria-label={`Retry ${cardNumber(item)}`}
+      aria-label={`${stuck ? "Rebuild" : "Retry"} ${cardNumber(item)}`}
     >
-      Retry
+      {stuck ? "Rebuild" : "Retry"}
     </Button>
   );
 }
@@ -215,7 +227,9 @@ export function BayCardView({
               </button>
               <p className="text-muted-foreground">{e.label}</p>
               <div className="flex gap-1.5">
-                {e.action === "retry" && <RetryAction projectId={projectId} item={e.card.item} />}
+                {e.action === "retry" && (
+                  <RetryAction projectId={projectId} item={e.card.item} pr={e.card.pr} />
+                )}
                 {e.action === "open_pr" && pr && (
                   <Button size="xs" variant="outline" onClick={() => platform.openExternal(pr.url)}>
                     Open PR #{pr.number}
