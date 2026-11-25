@@ -14,7 +14,7 @@ import { handleFailure } from "./failures";
 import type { FactoryPr, PrEvidence } from "./github-port";
 import { inheritedCi } from "./inherited-ci";
 import { stopBeforeAgentTurn } from "./item-budget";
-import { prDecidedOutside, readyForYou } from "./merge";
+import { prDecidedOutside, readyForYou, readyInboxId } from "./merge";
 import { escalate, failItem, runAudit } from "./outcomes";
 import { changedPaths, isUiFile, withVisionFile } from "./policy";
 import { decidedPr } from "./pr-gone";
@@ -208,8 +208,24 @@ export async function advanceVerifying(
   // the normal path (the queue, or a person merges it) once it is open.
   if (current.pr?.state === "draft") {
     current = leaveQueue(ctx, current);
-    if (!current.note?.startsWith(DRAFT_NOTE)) {
-      current = ctx.store.updateItem(current.id, (i) => ({ ...i, note: DRAFT_NOTE }));
+    // An announced "Ready to merge" PR just became a draft: GitHub would refuse the merge that
+    // item asks for, so it is resolved with the reason. Its ready nudge goes too, so marking it
+    // ready again announces it afresh.
+    const ready = ctx.inbox.find(readyInboxId(current.id));
+    if (ready?.status === "open") {
+      ctx.inbox.close(ready, "resolved", {
+        note: "The pull request was converted to a draft",
+      });
+    }
+    if (
+      !current.note?.startsWith(DRAFT_NOTE) ||
+      current.nudges.ready ||
+      current.nudges.ready_checked
+    ) {
+      current = ctx.store.updateItem(current.id, (i) => {
+        const { ready: _ready, ready_checked: _checked, ...nudges } = i.nudges;
+        return { ...i, nudges, note: DRAFT_NOTE };
+      });
     }
     return loop;
   }
@@ -218,7 +234,12 @@ export async function advanceVerifying(
     await readyForYou(ctx, project, current);
     return loop;
   }
-  joinQueue(ctx, current);
+  current = joinQueue(ctx, current);
+  // Marked ready: the queue (or the merge) replaces the note, never leaves it saying a draft is
+  // waiting on the person who already marked it ready.
+  if (current.note?.startsWith(DRAFT_NOTE)) {
+    current = ctx.store.updateItem(current.id, (i) => ({ ...i, note: null }));
+  }
   return loop;
 }
 
