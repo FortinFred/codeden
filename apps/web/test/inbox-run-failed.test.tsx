@@ -19,6 +19,11 @@ vi.mock("sonner", () => ({ toast }));
 
 afterEach(() => vi.clearAllMocks());
 
+/** Show the notices: failed runs of a session the factory doesn't handle are notices (#63). */
+async function openNotices() {
+  fireEvent.click(await screen.findByRole("button", { name: /^Notices/ }));
+}
+
 /** The rendered inbox entry of an item. */
 async function entry(id: string): Promise<HTMLElement> {
   return waitFor(() => {
@@ -33,6 +38,7 @@ describe("failed runs in the inbox (#275)", () => {
     const client = createMockClient();
     const retry = vi.spyOn(client, "retryInbox");
     renderWithClient(<InboxPage />, client, { withRouter: true });
+    await openNotices();
     const codex = await entry("ib-failed");
     // Once the setup checks are in, Retry knows it would only fail again.
     await waitFor(() =>
@@ -60,6 +66,7 @@ describe("failed runs in the inbox (#275)", () => {
       new Error("Could not open the session: The agent process crashed"),
     );
     renderWithClient(<InboxPage />, client, { withRouter: true });
+    await openNotices();
     const claude = await entry("ib-failed-a11y");
     fireEvent.click(within(claude).getByRole("button", { name: /Retry/ }));
     await waitFor(() =>
@@ -75,6 +82,7 @@ describe("failed runs in the inbox (#275)", () => {
     const { queryClient } = renderWithClient(<InboxPage />, client, { withRouter: true });
     const stop = startRealtime(client, queryClient);
     try {
+      await openNotices();
       await screen.findByText("Failed runs · 2");
       fireEvent.click(screen.getByRole("button", { name: "Dismiss all" }));
       await waitFor(() => expect(screen.queryByText(/Failed runs/)).toBeNull());

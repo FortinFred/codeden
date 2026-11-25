@@ -44,7 +44,7 @@ describe("inbox while the snapshot is loading", () => {
 
     // Once the snapshot lands, the waiting items show.
     await act(async () => pending.release(snapshot));
-    await screen.findByText("Security audit (Billing API) flagged 2 medium findings");
+    await screen.findByText("Force push to codeden/fix-checkout-flake");
     expect(screen.queryByText("You're all caught up")).toBeNull();
     expect(screen.queryByRole("status", { name: "Loading the inbox" })).toBeNull();
   });
