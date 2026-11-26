@@ -120,6 +120,25 @@ describe("OpenSpec builder brief", () => {
     expect(brief).toMatch(/if it is there, keep it/i);
   });
 
+  it("keeps the create-if-absent instruction in the Implement step too", () => {
+    const implementing = {
+      ...item,
+      investigation: {
+        kind: "analysis",
+        outcome: "implement",
+        summary: "No sign-in yet",
+        details: "A sign-in page and a session cookie",
+        testPath: null,
+        at: "2026-01-01T00:00:00.000Z",
+      },
+    } as FactoryItem;
+    const brief = builderPrompt(implementing, "");
+    expect(brief).toContain("Implement feature");
+    expect(brief).toMatch(/if `openspec\/changes\/add-login\/proposal\.md` (isn't|is not) there/i);
+    expect(brief).toMatch(/create it from the item's title/);
+    expect(brief).toMatch(/and the request text/);
+  });
+
   it("leaves a GitHub issue's brief without the OpenSpec plan block", () => {
     const issueItem = {
       ...item,

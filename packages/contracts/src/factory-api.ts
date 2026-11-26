@@ -76,6 +76,34 @@ export type OpenSpecChangeRef = z.infer<typeof OpenSpecChangeRef>;
 export const OPENSPEC_CHANGE_TITLE_MAX = 200;
 /** Longest body (why and what) of an OpenSpec change created from the app. */
 export const OPENSPEC_CHANGE_BODY_MAX = 8_000;
+/** Longest change folder id derived from a title, so the folder stays a comfortable file name. */
+export const OPENSPEC_CHANGE_ID_MAX = 100;
+
+/**
+ * Names Windows reserves for devices: a folder with one of them can't be created there, in any
+ * case. A title that unfolds to one gets a prefix so it stays a valid folder.
+ */
+const WINDOWS_DEVICE_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/;
+
+/**
+ * An OpenSpec change folder id from a title: lowercase letters, digits and single hyphens, with
+ * accents folded (`Café` becomes `cafe`). Nothing else survives, so a title can never make the
+ * folder leave `openspec/changes/`; a title with no usable character becomes `change`, and a
+ * Windows device name (`CON`, `NUL`, `COM1`…) gets `change-` so the folder can be created there
+ * too. The server and the web mock share it, so a title names the same folder in both.
+ */
+export function openSpecChangeId(title: string): string {
+  const id =
+    title
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, OPENSPEC_CHANGE_ID_MAX)
+      .replace(/-+$/, "") || "change";
+  return WINDOWS_DEVICE_NAME.test(id) ? `change-${id}` : id;
+}
 
 /**
  * `POST /api/projects/:id/factory/openspec/changes` ("New change"): write a change folder from
