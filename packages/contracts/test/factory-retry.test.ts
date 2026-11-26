@@ -36,15 +36,20 @@ describe("retrying stopped factory work (#259)", () => {
     const closed = { ...failed, pr: { ...pr, state: "closed" as const } };
     expect(stoppedRetry(closed)).toEqual({ mode: "rebuild", pr: null, label: null });
     expect(stoppedRetry({ ...failed, pr: null })?.mode).toBe("rebuild");
-    // Stuck work is in the inbox, and work over the size limit waits on the PM.
-    expect(stoppedRetry({ ...failed, failureKind: "stuck" })).toMatchObject({
-      mode: "rereview",
-      label: null,
-    });
     // A size failure waits on the PM to split or allow it: Retry must not be offered (#55).
     const tooLarge = { ...failed, reason: "ci: failed; size: 6,000 lines in 2 files" };
     expect(stoppedRetry(tooLarge)).toBeNull();
     expect(stoppedRetry({ ...failed, stage: "rejected" })?.label).toBeNull();
+  });
+
+  it("rebuilds stuck work by default, even while its open PR still is (#74)", () => {
+    // Re-reviewing a PR whose CI can never pass (or that is structurally stuck) repeats the
+    // same failure forever, so stuck work starts over from the first step by default.
+    expect(stoppedRetry({ ...failed, failureKind: "stuck" })).toEqual({
+      mode: "rebuild",
+      pr,
+      label: null,
+    });
   });
 
   it("offers nothing for work that hasn't stopped", () => {

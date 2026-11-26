@@ -585,8 +585,9 @@ export class FactoryService {
   }
 
   /**
-   * Run a stopped item again: its open PR back to review (`rereview`, the default while it is
-   * open), or a fresh attempt from the first step (`rebuild`).
+   * Run a stopped item again: its open PR back to review (`rereview`, the default for unstuck
+   * work while it is open), or a fresh attempt from the first step (`rebuild`, the default for
+   * stuck work and without an open PR).
    */
   retry(
     projectId: string,

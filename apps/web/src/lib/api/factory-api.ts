@@ -86,9 +86,10 @@ export interface FactoryApi {
   /** Move an item that hasn't started to another pipeline. */
   setType(projectId: string, req: FactorySetTypeRequest): Promise<FactoryItem>;
   /**
-   * Run a stopped item again: with its PR open, a fresh review of that PR (`rereview`, the
-   * default then); otherwise, or with `rebuild`, from the first step. 409 `no_open_pr` when a
-   * re-review is asked for without an open PR.
+   * Run a stopped item again: for unstuck work with its PR open, a fresh review of that PR
+   * (`rereview`, the default then); for stuck work or without an open PR, from the first step
+   * (`rebuild`). 409 `no_open_pr` when a re-review is asked for without an open PR, and
+   * `stuck_needs_rebuild` when it is asked for stuck work.
    */
   retry(projectId: string, itemId: string, opts?: FactoryRetryOptions): Promise<FactoryItem>;
   /**

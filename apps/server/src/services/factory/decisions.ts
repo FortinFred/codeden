@@ -114,12 +114,14 @@ export async function setType(
 
 /**
  * Run an item that stopped (not reproduced, declined, failed checks, closed) again. `rereview`
- * (the default while its PR is open): the open PR goes straight back to a fresh review of its
- * current head, with fresh revise rounds; no reproduce or analyze, no second PR. `rebuild` (the
- * default without one): a fresh attempt from the first step with fresh sessions; its open PR is
- * closed with a link once the new one is open. A rebuild's earlier sessions go to
- * `earlierSessionIds`, which the loop archives once none of them is busy, so none is left
- * behind. If they were archived already, nothing is: a session someone restored since stays.
+ * (the default for unstuck work while its PR is open): the open PR goes straight back to a fresh
+ * review of its current head, with fresh revise rounds; no reproduce or analyze, no second PR.
+ * `rebuild` (the default for stuck work and without an open PR): a fresh attempt from the first
+ * step with fresh sessions; its open PR is closed with a link once the new one is open. Stuck
+ * work (`failureKind: stuck`) can't be re-reviewed: that would only repeat the failure, so an
+ * explicit `rereview` is refused. A rebuild's earlier sessions go to `earlierSessionIds`, which
+ * the loop archives once none of them is busy, so none is left behind. If they were archived
+ * already, nothing is: a session someone restored since stays.
  */
 export function retry(
   ctx: FactoryContext,
@@ -141,6 +143,12 @@ export function retry(
       throw conflict(
         `Item ${item.id} has no open pull request to re-review: retry it as a rebuild`,
         "no_open_pr",
+      );
+    }
+    if (item.failureKind === "stuck") {
+      throw conflict(
+        `Item ${item.id} is stuck, so a re-review of #${pr.number} would repeat the same failure: retry it as a rebuild`,
+        "stuck_needs_rebuild",
       );
     }
     const who = by === "user" ? "you" : "the PM";

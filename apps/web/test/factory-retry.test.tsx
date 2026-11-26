@@ -57,7 +57,7 @@ describe("Retry on the factory panel (#259)", () => {
       createMockClient(),
       { withRouter: true },
     );
-    const button = await screen.findByTestId("factory-retry");
+    const button = await screen.findByTestId("factory-rebuild");
     expect(button.getAttribute("title")).toMatch(/from the first step/);
   });
 
@@ -83,6 +83,7 @@ describe("Retry on the factory panel (#259)", () => {
     );
     expect(button.getAttribute("title")).toMatch(/#172/);
     fireEvent.click(button);
-    await waitFor(() => expect(retry).toHaveBeenCalledWith("p-app", "item-1", { mode: "rebuild" }));
+    // The shared rule's default: stuck work rebuilds, so no explicit mode is needed (#74).
+    await waitFor(() => expect(retry).toHaveBeenCalledWith("p-app", "item-1", {}));
   });
 });

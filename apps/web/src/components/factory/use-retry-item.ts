@@ -6,9 +6,9 @@ import { factoryKeys } from "@/lib/factory";
 
 /**
  * Retry a stopped factory item (§10.1): the one mutation behind every Retry button (the item
- * page, the panel's columns, the Factory view's Needs you cards and its repair bay). With its
- * pull request open the server sends that PR back to a fresh review; otherwise, or with
- * `mode: "rebuild"`, the work starts over from the first step.
+ * page, the panel's columns, the Factory view's Needs you cards and its repair bay). For unstuck
+ * work with its pull request open the server sends that PR back to a fresh review; otherwise
+ * (stuck work, no open PR), or with `mode: "rebuild"`, the work starts over from the first step.
  */
 export function useRetryItem(projectId: string, itemId: string, mode?: FactoryRetryMode) {
   const client = useClient();

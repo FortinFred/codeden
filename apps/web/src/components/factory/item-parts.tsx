@@ -187,6 +187,8 @@ export function ItemActions({ item, projectId }: { item: FactoryItem; projectId:
   const stopped = stoppedRetry(item);
   if (stopped) {
     const pr = stopped.pr;
+    // Stuck work (shared default: rebuild) has one way on: starting over.
+    const rebuilds = stopped.mode === "rebuild";
     return (
       <div className="space-y-1.5">
         {stopped.label && <p className="text-2xs text-muted-foreground">{stopped.label}</p>}
@@ -199,7 +201,7 @@ export function ItemActions({ item, projectId }: { item: FactoryItem; projectId:
             className="flex-1"
           />
           {/* With its PR open, Retry re-reviews it; starting over is the other choice. */}
-          {pr && (
+          {pr && !rebuilds && (
             <RetryButton
               projectId={projectId}
               item={item}
@@ -211,7 +213,9 @@ export function ItemActions({ item, projectId }: { item: FactoryItem; projectId:
         </div>
         {pr && (
           <p className="text-3xs text-muted-foreground">
-            Retry sends #{pr.number} back to a fresh review; Rebuild starts over and replaces it.
+            {rebuilds
+              ? `Rebuild starts over and replaces #${pr.number}.`
+              : `Retry sends #${pr.number} back to a fresh review; Rebuild starts over and replaces it.`}
           </p>
         )}
       </div>
