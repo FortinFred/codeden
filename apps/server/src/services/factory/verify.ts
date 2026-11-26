@@ -213,7 +213,8 @@ export async function advanceVerifying(
     // ready again announces it afresh.
     const ready = ctx.inbox.find(readyInboxId(current.id));
     if (ready?.status === "open") {
-      ctx.inbox.close(ready, "resolved", {
+      ctx.inbox.settle(ready, {
+        by: "factory",
         note: "The pull request was converted to a draft",
       });
     }

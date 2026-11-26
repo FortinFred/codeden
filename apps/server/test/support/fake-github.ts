@@ -287,6 +287,8 @@ export class FakeGithub {
     if (m && method === "PUT") {
       const issue = this.issues.get(Number(m[1]));
       if (!issue?.pr) return notFound;
+      // Like GitHub: a draft cannot be merged.
+      if (issue.pr.draft) return ok({ message: "Pull Request is still a draft" }, 422);
       this.touch(issue.number, (i) => {
         if (!i.pr) return;
         i.pr.merged = true;

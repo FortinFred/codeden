@@ -131,7 +131,7 @@ export function raiseSpecInbox(ctx: FactoryContext, item: FactoryItem): void {
 
 function closeSpecInbox(ctx: FactoryContext, itemId: string, note: string): void {
   const open = ctx.inbox.find(specInboxId(itemId));
-  if (open?.status === "open") ctx.inbox.close(open, "resolved", { note });
+  if (open?.status === "open") ctx.inbox.settle(open, { by: "factory", note });
 }
 
 /**
@@ -308,6 +308,6 @@ export function settleSpecInbox(ctx: FactoryContext, projectId: string): void {
     if (!open.id.startsWith(SPEC_INBOX)) continue;
     const item = ctx.store.item(open.id.slice(SPEC_INBOX.length));
     if (item?.stage === "building" && specPending(item)) continue;
-    ctx.inbox.close(open, "resolved", { note: "The spec no longer waits for approval" });
+    ctx.inbox.settle(open, { by: "factory", note: "The spec no longer waits for approval" });
   }
 }

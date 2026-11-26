@@ -163,7 +163,8 @@ export function revertLanded(
   const revertPr = revert.pr ? `#${revert.pr.number}` : "the revert";
   const inbox = ctx.inbox.find(regressionInboxId(original?.id ?? revert.id));
   if (inbox?.status === "open") {
-    ctx.inbox.close(inbox, "resolved", {
+    ctx.inbox.settle(inbox, {
+      by: "factory",
       note: `reverted in ${revertPr}; CI on ${branch} is green again`,
     });
   }
@@ -224,7 +225,7 @@ export function revertsOnResume(ctx: FactoryContext, projectId: string): void {
       nudges: { ...i.nudges, [AFTER_REVERT_DUE]: at },
     }));
     const inbox = ctx.inbox.find(regressionInboxId(original.id));
-    if (inbox?.status === "open") ctx.inbox.close(inbox, "resolved", { note: "loop resumed" });
+    if (inbox?.status === "open") ctx.inbox.settle(inbox, { by: "factory", note: "loop resumed" });
   }
 }
 
@@ -253,10 +254,10 @@ export async function resumeWhenGreen(
     const inbox = ctx.inbox.find(regressionInboxId(original.id));
     if (inbox?.status !== "open") continue;
     if (reverts.some((r) => r.revertOf === original.id && revertMerged(r))) {
-      ctx.inbox.close(inbox, "resolved", { note: green });
+      ctx.inbox.settle(inbox, { by: "factory", note: green });
       continue;
     }
-    ctx.inbox.close(inbox, "resolved", { note: `${green}; the revert didn't merge` });
+    ctx.inbox.settle(inbox, { by: "factory", note: `${green}; the revert didn't merge` });
     ctx.store.updateItem(original.id, (i) => ({
       ...i,
       note: `Its revert didn't merge, and ${green}: its merge stands`,

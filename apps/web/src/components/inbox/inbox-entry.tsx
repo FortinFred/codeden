@@ -53,10 +53,15 @@ function MirroredRequest({ item }: { item: InboxItem }) {
   );
 }
 
-/** Why CodeDen settled the item by itself ("PR #12 merged"), when it did. */
+/**
+ * The reason a closed item carries ("PR #12 merged"): a settlement's note, or the bare `{ note }`
+ * a person's resolution and closes written before settlements said who used.
+ */
 function settledNote(item: InboxItem): string | null {
   const parsed = InboxSettlement.safeParse(item.resolution);
-  return parsed.success ? parsed.data.note : null;
+  if (parsed.success) return parsed.data.note;
+  const note = (item.resolution as { note?: unknown } | null)?.note;
+  return typeof note === "string" ? note : null;
 }
 
 /** DOM id of an inbox entry (a conflict card too), for scrolling it into view. */

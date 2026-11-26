@@ -211,7 +211,7 @@ export function settleSpotCheckInbox(ctx: FactoryContext, project: Project): voi
   const existing = ctx.inbox.find(id);
   if (pending.length === 0) {
     if (existing?.status === "open") {
-      ctx.inbox.close(existing, "resolved", { note: "Nothing left to spot-check" });
+      ctx.inbox.settle(existing, { by: "factory", note: "Nothing left to spot-check" });
     }
     return;
   }
